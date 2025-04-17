@@ -1,28 +1,20 @@
-"use client"
+import { createClient } from "@/utils/supabase/server";
+import { redirect } from "next/navigation";
 
-import { useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { useAuth } from "@/lib/auth/auth-context"
+export default async function Home() {
+  const supabase = await createClient();
 
-export default function Home() {
-  const { user, isLoading } = useAuth()
-  const router = useRouter()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  useEffect(() => {
-    // Only redirect after we've checked auth status
-    if (!isLoading) {
-      if (user) {
-        router.push("/backlog")
-      } else {
-        router.push("/login")
-      }
-    }
-  }, [user, isLoading, router])
-
+  if (!user) {
+    return redirect("/sign-in");
+  }
   // Show loading state while checking auth
   return (
     <div className="flex min-h-screen items-center justify-center">
       <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
     </div>
-  )
+  );
 }
