@@ -1,8 +1,8 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { Calendar } from "@/components/ui/calendar";
-import { Button } from "@/components/ui/button";
+import { useState } from "react"
+import { Calendar } from "@/components/ui/calendar"
+import { Button } from "@/components/ui/button"
 import {
   Dialog,
   DialogContent,
@@ -10,38 +10,23 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog";
-import {
-  Form,
-  FormControl,
-  FormDescription,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { format } from "date-fns";
-import { CalendarIcon } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { zodResolver } from "@hookform/resolvers/zod";
-import type { Task } from "@/lib/data";
+} from "@/components/ui/dialog"
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"
+import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { format } from "date-fns"
+import { CalendarIcon } from "lucide-react"
+import { cn } from "@/lib/utils"
+import { useForm } from "react-hook-form"
+import { z } from "zod"
+import { zodResolver } from "@hookform/resolvers/zod"
+import { createTask, updateTask, type Task } from "@/lib/data"
+import { useToast } from "@/hooks/use-toast"
+import { useEffect, useCallback } from "react"
+import { getTasks } from "@/lib/data"
 
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
@@ -54,20 +39,18 @@ const formSchema = z.object({
     })
     .nullable(),
   status: z.enum(["Backlog", "Active", "Done", "Canceled"]),
-  source: z
-    .enum(["GitHub PR", "Jira Issue", "Manual", ""])
-    .transform((val) => (val === "" ? null : val)),
+  source: z.enum(["GitHub PR", "Jira Issue", "Manual", ""]).transform((val) => (val === "" ? null : val)),
   priority: z.enum(["Minor", "Normal", "Major", "Critical"]),
-});
+})
 
-type FormValues = z.infer<typeof formSchema>;
+type FormValues = z.infer<typeof formSchema>
 
 interface TaskModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit: (data: FormValues) => void;
-  defaultValues?: Partial<Task>;
-  parentTasks?: Task[];
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onSubmit?: (task: Task) => void
+  defaultValues?: Partial<Task>
+  parentTasks?: Task[]
 }
 
 export function TaskModal({
@@ -75,11 +58,14 @@ export function TaskModal({
   onOpenChange,
   onSubmit,
   defaultValues,
-  parentTasks = [],
+  parentTasks: initialParentTasks = [],
 }: TaskModalProps) {
-  const [dueDateType, setDueDateType] = useState<
-    "date" | "quarter" | "sprint" | "year"
-  >(defaultValues?.dueDate?.type || "date");
+  const [dueDateType, setDueDateType] = useState<"date" | "quarter" | "sprint" | "year">(
+    defaultValues?.dueDate?.type || "date",
+  )
+  const [isLoading, setIsLoading] = useState(false)
+  const [parentTasks, setParentTasks] = useState<Task[]>(initialParentTasks)
+  const { toast } = useToast()
 
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -92,32 +78,87 @@ export function TaskModal({
       source: defaultValues?.source || null,
       priority: defaultValues?.priority || "Normal",
     },
-  });
+  })
 
-  const handleSubmit = (values: FormValues) => {
-    onSubmit(values);
-    onOpenChange(false);
-    form.reset();
-  };
+  // Load potential parent tasks if not provided
+  const loadParentTasks = useCallback(async () => {
+    if (initialParentTasks.length === 0) {
+      try {
+        const allTasks = await getTasks()
+        // Filter out tasks that could be parents (no parent themselves)
+        const potentialParents = allTasks.filter((task) => !task.parentId)
+        setParentTasks(potentialParents)
+      } catch (error) {
+        console.error("Error loading parent tasks:", error)
+      }
+    }
+  }, [initialParentTasks])
+
+  useEffect(() => {
+    if (open) {
+      loadParentTasks()
+    }
+  }, [open, loadParentTasks])
+
+  const handleSubmit = async (values: FormValues) => {
+    setIsLoading(true)
+    try {
+      let task: Task | null
+
+      if (defaultValues?.id) {
+        // Update existing task
+        task = await updateTask(defaultValues.id, values)
+        if (task) {
+          toast({
+            title: "Task updated",
+            description: "Your task has been updated successfully.",
+          })
+        }
+      } else {
+        // Create new task
+        task = await createTask(values as Omit<Task, "id" | "createdDate" | "userId">)
+        if (task) {
+          toast({
+            title: "Task created",
+            description: "Your new task has been created successfully.",
+          })
+        }
+      }
+
+      if (!task) {
+        throw new Error("Failed to save task")
+      }
+
+      onOpenChange(false)
+      form.reset()
+
+      // Notify parent component
+      if (onSubmit) {
+        onSubmit(task)
+      }
+    } catch (error) {
+      console.error("Error saving task:", error)
+      toast({
+        title: "Error",
+        description: "There was a problem saving your task. Please try again.",
+        variant: "destructive",
+      })
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
-          <DialogTitle>
-            {defaultValues ? "Edit Task" : "Create New Task"}
-          </DialogTitle>
+          <DialogTitle>{defaultValues?.id ? "Edit Task" : "Create New Task"}</DialogTitle>
           <DialogDescription>
-            {defaultValues
-              ? "Update the details of your task."
-              : "Add a new task to your workflow."}
+            {defaultValues?.id ? "Update the details of your task." : "Add a new task to your workflow."}
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
-          <form
-            onSubmit={form.handleSubmit(handleSubmit)}
-            className="space-y-6"
-          >
+          <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
             <FormField
               control={form.control}
               name="title"
@@ -139,15 +180,9 @@ export function TaskModal({
                 <FormItem>
                   <FormLabel>Description (Markdown)</FormLabel>
                   <FormControl>
-                    <Textarea
-                      placeholder="Task description in markdown format"
-                      className="min-h-[100px]"
-                      {...field}
-                    />
+                    <Textarea placeholder="Task description in markdown format" className="min-h-[100px]" {...field} />
                   </FormControl>
-                  <FormDescription>
-                    You can use Markdown to format your description.
-                  </FormDescription>
+                  <FormDescription>You can use Markdown to format your description.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -160,10 +195,7 @@ export function TaskModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Priority</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select priority" />
@@ -187,10 +219,7 @@ export function TaskModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Status</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select status" />
@@ -216,10 +245,7 @@ export function TaskModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Parent Task (Optional)</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value || ""}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select parent task" />
@@ -234,9 +260,7 @@ export function TaskModal({
                         ))}
                       </SelectContent>
                     </Select>
-                    <FormDescription>
-                      Optionally assign this task to a parent task/project.
-                    </FormDescription>
+                    <FormDescription>Optionally assign this task to a parent task/project.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -248,17 +272,14 @@ export function TaskModal({
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Source (Optional)</FormLabel>
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value || ""}
-                    >
+                    <Select onValueChange={field.onChange} defaultValue={field.value || ""}>
                       <FormControl>
                         <SelectTrigger>
                           <SelectValue placeholder="Select source" />
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         <SelectItem value="GitHub PR">GitHub PR</SelectItem>
                         <SelectItem value="Jira Issue">Jira Issue</SelectItem>
                         <SelectItem value="Manual">Manual</SelectItem>
@@ -295,14 +316,11 @@ export function TaskModal({
                               variant="outline"
                               className={cn(
                                 "w-full pl-3 text-left font-normal",
-                                !field.value && "text-muted-foreground"
+                                !field.value && "text-muted-foreground",
                               )}
                             >
                               {field.value && field.value.type === "date" ? (
-                                format(
-                                  new Date(field.value.value as string),
-                                  "PPP"
-                                )
+                                format(new Date(field.value.value as string), "PPP")
                               ) : (
                                 <span>Pick a date</span>
                               )}
@@ -313,20 +331,9 @@ export function TaskModal({
                         <PopoverContent className="w-auto p-0" align="start">
                           <Calendar
                             mode="single"
-                            selected={
-                              field.value?.type === "date"
-                                ? new Date(field.value.value as string)
-                                : undefined
-                            }
+                            selected={field.value?.type === "date" ? new Date(field.value.value as string) : undefined}
                             onSelect={(date) =>
-                              field.onChange(
-                                date
-                                  ? {
-                                      type: "date",
-                                      value: date.toISOString().split("T")[0],
-                                    }
-                                  : null
-                              )
+                              field.onChange(date ? { type: "date", value: date.toISOString().split("T")[0] } : null)
                             }
                             initialFocus
                           />
@@ -335,17 +342,8 @@ export function TaskModal({
                     </TabsContent>
                     <TabsContent value="quarter" className="pt-4">
                       <Select
-                        onValueChange={(value) =>
-                          field.onChange({
-                            type: "quarter",
-                            value: Number.parseInt(value),
-                          })
-                        }
-                        defaultValue={
-                          field.value?.type === "quarter"
-                            ? String(field.value.value)
-                            : undefined
-                        }
+                        onValueChange={(value) => field.onChange({ type: "quarter", value: Number.parseInt(value) })}
+                        defaultValue={field.value?.type === "quarter" ? String(field.value.value) : undefined}
                       >
                         <FormControl>
                           <SelectTrigger>
@@ -366,17 +364,8 @@ export function TaskModal({
                           type="number"
                           placeholder="Sprint number"
                           min={1}
-                          defaultValue={
-                            field.value?.type === "sprint"
-                              ? field.value.value
-                              : ""
-                          }
-                          onChange={(e) =>
-                            field.onChange({
-                              type: "sprint",
-                              value: Number.parseInt(e.target.value),
-                            })
-                          }
+                          defaultValue={field.value?.type === "sprint" ? field.value.value : ""}
+                          onChange={(e) => field.onChange({ type: "sprint", value: Number.parseInt(e.target.value) })}
                         />
                       </FormControl>
                     </TabsContent>
@@ -386,37 +375,50 @@ export function TaskModal({
                           type="number"
                           placeholder="Year"
                           min={2023}
-                          defaultValue={
-                            field.value?.type === "year"
-                              ? field.value.value
-                              : new Date().getFullYear()
-                          }
-                          onChange={(e) =>
-                            field.onChange({
-                              type: "year",
-                              value: Number.parseInt(e.target.value),
-                            })
-                          }
+                          defaultValue={field.value?.type === "year" ? field.value.value : new Date().getFullYear()}
+                          onChange={(e) => field.onChange({ type: "year", value: Number.parseInt(e.target.value) })}
                         />
                       </FormControl>
                     </TabsContent>
                   </Tabs>
-                  <FormDescription>
-                    Set a due date for your task.
-                  </FormDescription>
+                  <FormDescription>Set a due date for your task.</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
             />
 
             <DialogFooter>
-              <Button type="submit">
-                {defaultValues ? "Update Task" : "Create Task"}
+              <Button type="submit" disabled={isLoading}>
+                {isLoading ? (
+                  <>
+                    <span className="mr-2">
+                      <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
+                        <circle
+                          className="opacity-25"
+                          cx="12"
+                          cy="12"
+                          r="10"
+                          stroke="currentColor"
+                          strokeWidth="4"
+                          fill="none"
+                        />
+                        <path
+                          className="opacity-75"
+                          fill="currentColor"
+                          d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+                        />
+                      </svg>
+                    </span>
+                    {defaultValues?.id ? "Updating..." : "Creating..."}
+                  </>
+                ) : (
+                  <>{defaultValues?.id ? "Update Task" : "Create Task"}</>
+                )}
               </Button>
             </DialogFooter>
           </form>
         </Form>
       </DialogContent>
     </Dialog>
-  );
+  )
 }

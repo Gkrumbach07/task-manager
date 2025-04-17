@@ -27,14 +27,16 @@ import {
   formatDueDate,
   getPriorityColor,
   getStatusColor,
-} from "@/lib/data";
+  updateTask,
+} from "@/lib/queries/tasks";
 import { Markdown } from "@/components/markdown";
+import { useToast } from "@/hooks/use-toast";
 
-interface TaskDetailProps {
+type TaskDetailProps = {
   task: Task;
   parentTask?: Task | null;
   childTasks?: Task[];
-}
+};
 
 export function TaskDetail({
   task,
@@ -42,6 +44,8 @@ export function TaskDetail({
   childTasks = [],
 }: TaskDetailProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [currentTask, setCurrentTask] = useState(task);
+  const { toast } = useToast();
 
   const renderSourceIcon = (source: Task["source"]) => {
     if (!source) return null;
@@ -56,12 +60,33 @@ export function TaskDetail({
     }
   };
 
+  const handleDescriptionSave = async (newContent: string) => {
+    try {
+      const updatedTask = await updateTask(task.id, { body: newContent });
+      if (updatedTask) {
+        setCurrentTask(updatedTask);
+        toast({
+          title: "Success",
+          description: "Task description updated successfully.",
+        });
+      } else {
+        throw new Error("Failed to update task");
+      }
+    } catch {
+      toast({
+        title: "Error",
+        description: "Failed to update task description. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild>
           <Link
-            href={task.status === "Active" ? "/active" : "/backlog"}
+            href={currentTask.status === "Active" ? "/active" : "/backlog"}
             className="flex items-center gap-2"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -81,28 +106,28 @@ export function TaskDetail({
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
-            <CardTitle className="text-2xl">{task.title}</CardTitle>
+            <CardTitle className="text-2xl">{currentTask.title}</CardTitle>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge className={getPriorityColor(task.priority)}>
-                {task.priority}
+              <Badge className={getPriorityColor(currentTask.priority)}>
+                {currentTask.priority}
               </Badge>
-              <Badge className={getStatusColor(task.status)}>
-                {task.status}
+              <Badge className={getStatusColor(currentTask.status)}>
+                {currentTask.status}
               </Badge>
-              {task.dueDate && (
+              {currentTask.dueDate && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {formatDueDate(task.dueDate)}
+                  {formatDueDate(currentTask.dueDate)}
                 </Badge>
               )}
               <Badge variant="outline" className="flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
-                Created: {task.createdDate.toLocaleDateString()}
+                Created: {currentTask.createdDate.toLocaleDateString()}
               </Badge>
-              {task.source && (
+              {currentTask.source && (
                 <Badge variant="outline" className="flex items-center gap-1">
-                  {renderSourceIcon(task.source)}
-                  {task.source}
+                  {renderSourceIcon(currentTask.source)}
+                  {currentTask.source}
                 </Badge>
               )}
               {parentTask && (
@@ -126,7 +151,10 @@ export function TaskDetail({
             </TabsList>
             <TabsContent value="description" className="pt-4">
               <div className="prose dark:prose-invert max-w-none">
-                <Markdown content={task.body} />
+                <Markdown
+                  content={currentTask.body || ""}
+                  onSave={handleDescriptionSave}
+                />
               </div>
             </TabsContent>
             {childTasks.length > 0 && (
@@ -170,16 +198,17 @@ export function TaskDetail({
         </CardContent>
         <CardFooter className="flex justify-between">
           <div className="text-sm text-muted-foreground">
-            Task ID: {task.id}
+            Task ID: {currentTask.id}
           </div>
           <div className="flex gap-2">
-            {task.status === "Backlog" && (
+            {currentTask.status === "Backlog" && (
               <Button variant="default">Move to Active</Button>
             )}
-            {task.status === "Active" && (
+            {currentTask.status === "Active" && (
               <Button variant="default">Mark as Done</Button>
             )}
-            {(task.status === "Backlog" || task.status === "Active") && (
+            {(currentTask.status === "Backlog" ||
+              currentTask.status === "Active") && (
               <Button variant="outline">Cancel Task</Button>
             )}
           </div>
@@ -193,7 +222,7 @@ export function TaskDetail({
           console.log("Update task:", data);
           // In a real app, this would update the task
         }}
-        defaultValues={task}
+        defaultValues={currentTask}
       />
     </div>
   );

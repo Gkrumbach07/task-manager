@@ -1,3 +1,6 @@
+import { supabaseClient } from "./supabase/client"
+import { v4 as uuidv4 } from "uuid"
+
 export type TaskStatus = "Backlog" | "Active" | "Done" | "Canceled"
 export type TaskPriority = "Minor" | "Normal" | "Major" | "Critical"
 export type TaskSource = "GitHub PR" | "Jira Issue" | "Manual" | null
@@ -18,134 +21,228 @@ export interface Task {
   source: TaskSource
   priority: TaskPriority
   hasChildren?: boolean
+  userId?: string | null
 }
 
-// Mock data for development
-export const tasks: Task[] = [
-  {
-    id: "task-1",
-    title: "Design task manager UI",
-    body: "# Design Task Manager UI\n\nCreate wireframes and mockups for the task manager application. Focus on the list view and make sure it's responsive.\n\n## Requirements\n- Clean, minimal design\n- Mobile-friendly\n- Dark mode support",
-    parentId: null,
-    dueDate: { type: "date", value: "2025-04-20" },
-    createdDate: new Date("2025-04-10"),
-    status: "Active",
-    source: "Jira Issue",
-    priority: "Major",
-    hasChildren: true,
-  },
-  {
-    id: "task-2",
-    title: "Create header component",
-    body: "Create a responsive header component with navigation and user profile dropdown.",
-    parentId: "task-1",
-    dueDate: { type: "date", value: "2025-04-18" },
-    createdDate: new Date("2025-04-11"),
-    status: "Active",
-    source: "GitHub PR",
-    priority: "Normal",
-  },
-  {
-    id: "task-3",
-    title: "Implement task list component",
-    body: "Create a component to display tasks in a list format with sorting and filtering options.",
-    parentId: "task-1",
-    dueDate: { type: "date", value: "2025-04-19" },
-    createdDate: new Date("2025-04-12"),
-    status: "Backlog",
-    source: "Manual",
-    priority: "Major",
-  },
-  {
-    id: "task-4",
-    title: "Backend API development",
-    body: "# Backend API Development\n\nDevelop RESTful API endpoints for task management.\n\n## Endpoints needed:\n- GET /tasks\n- POST /tasks\n- PUT /tasks/:id\n- DELETE /tasks/:id\n\n## Authentication\nImplement JWT authentication for API security.",
-    parentId: null,
-    dueDate: { type: "quarter", value: 2 },
-    createdDate: new Date("2025-04-05"),
-    status: "Backlog",
-    source: "Jira Issue",
-    priority: "Critical",
-    hasChildren: true,
-  },
-  {
-    id: "task-5",
-    title: "Database schema design",
-    body: "Design the database schema for tasks, users, and relationships.",
-    parentId: "task-4",
-    dueDate: { type: "sprint", value: 3 },
-    createdDate: new Date("2025-04-06"),
-    status: "Backlog",
-    source: null,
-    priority: "Major",
-  },
-  {
-    id: "task-6",
-    title: "Implement authentication",
-    body: "Set up JWT authentication for the API.",
-    parentId: "task-4",
-    dueDate: { type: "sprint", value: 3 },
-    createdDate: new Date("2025-04-07"),
-    status: "Backlog",
-    source: null,
-    priority: "Critical",
-  },
-  {
-    id: "task-7",
-    title: "Write documentation",
-    body: "Create comprehensive documentation for the API.",
-    parentId: "task-4",
-    dueDate: { type: "sprint", value: 4 },
-    createdDate: new Date("2025-04-08"),
-    status: "Backlog",
-    source: null,
-    priority: "Normal",
-  },
-  {
-    id: "task-8",
-    title: "Deploy to production",
-    body: "Deploy the application to production environment.",
-    parentId: null,
-    dueDate: { type: "year", value: 2025 },
-    createdDate: new Date("2025-04-01"),
-    status: "Backlog",
-    source: "Manual",
-    priority: "Major",
-  },
-  {
-    id: "task-9",
-    title: "User testing",
-    body: "Conduct user testing sessions and gather feedback.",
-    parentId: null,
-    dueDate: { type: "quarter", value: 3 },
-    createdDate: new Date("2025-04-02"),
-    status: "Backlog",
-    source: "Jira Issue",
-    priority: "Normal",
-  },
-  {
-    id: "task-10",
-    title: "Fix navigation bug",
-    body: "Fix the navigation bug that occurs on mobile devices.",
-    parentId: null,
-    dueDate: { type: "date", value: "2025-04-15" },
-    createdDate: new Date("2025-04-09"),
-    status: "Done",
-    source: "GitHub PR",
-    priority: "Major",
-  },
-  {
-    id: "task-11",
-    title: "Update dependencies",
-    body: "Update all npm dependencies to their latest versions.",
-    parentId: null,
-    dueDate: { type: "date", value: "2025-04-05" },
-    createdDate: new Date("2025-04-03"),
-    status: "Canceled",
-    source: null,
-    priority: "Minor",
-  },
-]
+// Database to client model conversion
+export const dbTaskToClientTask = (dbTask: any): Task => {
+  return {
+    id: dbTask.id,
+    title: dbTask.title,
+    body: dbTask.body,
+    parentId: dbTask.parent_id,
+    dueDate: dbTask.due_date_type
+      ? {
+          type: dbTask.due_date_type as "date" | "quarter" | "sprint" | "year",
+          value: dbTask.due_date_value,
+        }
+      : null,
+    createdDate: new Date(dbTask.created_date),
+    status: dbTask.status as TaskStatus,
+    source: dbTask.source as TaskSource,
+    priority: dbTask.priority as TaskPriority,
+    userId: dbTask.user_id,
+    hasChildren: false, // Will be updated later if needed
+  }
+}
+
+// Client to database model conversion
+export const clientTaskToDbTask = (task: Partial<Task>) => {
+  return {
+    id: task.id,
+    title: task.title,
+    body: task.body,
+    parent_id: task.parentId,
+    due_date_type: task.dueDate?.type,
+    due_date_value: task.dueDate?.value?.toString(),
+    status: task.status,
+    source: task.source,
+    priority: task.priority,
+    user_id: task.userId,
+  }
+}
+
+// Get all tasks for the current user
+export const getTasks = async (): Promise<Task[]> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return []
+
+  const { data, error } = await supabaseClient.from("tasks").select("*").eq("user_id", user.id)
+
+  if (error) {
+    console.error("Error fetching tasks:", error)
+    return []
+  }
+
+  // Convert to client model
+  const tasks = data.map(dbTaskToClientTask)
+
+  // Update hasChildren property
+  const tasksWithChildren = new Set(tasks.filter((t) => t.parentId).map((t) => t.parentId))
+  return tasks.map((task) => ({
+    ...task,
+    hasChildren: tasksWithChildren.has(task.id),
+  }))
+}
+
+// Get tasks by status for the current user
+export const getTasksByStatus = async (status: TaskStatus | TaskStatus[]): Promise<Task[]> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return []
+
+  const statusArray = Array.isArray(status) ? status : [status]
+
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .select("*")
+    .eq("user_id", user.id)
+    .in("status", statusArray)
+
+  if (error) {
+    console.error("Error fetching tasks by status:", error)
+    return []
+  }
+
+  // Convert to client model
+  const tasks = data.map(dbTaskToClientTask)
+
+  // Update hasChildren property
+  const tasksWithChildren = new Set(tasks.filter((t) => t.parentId).map((t) => t.parentId))
+  return tasks.map((task) => ({
+    ...task,
+    hasChildren: tasksWithChildren.has(task.id),
+  }))
+}
+
+// Get child tasks
+export const getChildTasks = async (parentId: string): Promise<Task[]> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return []
+
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .select("*")
+    .eq("user_id", user.id)
+    .eq("parent_id", parentId)
+
+  if (error) {
+    console.error("Error fetching child tasks:", error)
+    return []
+  }
+
+  return data.map(dbTaskToClientTask)
+}
+
+// Get task by ID
+export const getTaskById = async (id: string): Promise<Task | null> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return null
+
+  const { data, error } = await supabaseClient.from("tasks").select("*").eq("user_id", user.id).eq("id", id).single()
+
+  if (error) {
+    console.error("Error fetching task by ID:", error)
+    return null
+  }
+
+  return dbTaskToClientTask(data)
+}
+
+// Create a new task
+export const createTask = async (task: Omit<Task, "id" | "createdDate" | "userId">): Promise<Task | null> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return null
+
+  const newTask = {
+    ...clientTaskToDbTask(task as Partial<Task>),
+    id: uuidv4(),
+    user_id: user.id,
+  }
+
+  const { data, error } = await supabaseClient.from("tasks").insert(newTask).select().single()
+
+  if (error) {
+    console.error("Error creating task:", error)
+    return null
+  }
+
+  return dbTaskToClientTask(data)
+}
+
+// Update a task
+export const updateTask = async (id: string, task: Partial<Task>): Promise<Task | null> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return null
+
+  // Ensure we're only updating the user's own tasks
+  const { data: existingTask, error: fetchError } = await supabaseClient
+    .from("tasks")
+    .select("*")
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .single()
+
+  if (fetchError || !existingTask) {
+    console.error("Error fetching task to update or task not found:", fetchError)
+    return null
+  }
+
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .update(clientTaskToDbTask(task))
+    .eq("id", id)
+    .eq("user_id", user.id)
+    .select()
+    .single()
+
+  if (error) {
+    console.error("Error updating task:", error)
+    return null
+  }
+
+  return dbTaskToClientTask(data)
+}
+
+// Delete a task
+export const deleteTask = async (id: string): Promise<boolean> => {
+  const {
+    data: { user },
+  } = await supabaseClient.auth.getUser()
+
+  if (!user) return false
+
+  const { error } = await supabaseClient.from("tasks").delete().eq("id", id).eq("user_id", user.id)
+
+  if (error) {
+    console.error("Error deleting task:", error)
+    return false
+  }
+
+  return true
+}
+
+// Update task status
+export const updateTaskStatus = async (id: string, status: TaskStatus): Promise<Task | null> => {
+  return updateTask(id, { status })
+}
 
 export const getCurrentTimeInfo = () => {
   const now = new Date()
@@ -158,19 +255,6 @@ export const getCurrentTimeInfo = () => {
     sprint: currentSprint,
     quarter: currentQuarter,
   }
-}
-
-export const getTasksByStatus = (status: TaskStatus | TaskStatus[]) => {
-  const statusArray = Array.isArray(status) ? status : [status]
-  return tasks.filter((task) => statusArray.includes(task.status))
-}
-
-export const getChildTasks = (parentId: string) => {
-  return tasks.filter((task) => task.parentId === parentId)
-}
-
-export const getTaskById = (id: string) => {
-  return tasks.find((task) => task.id === id)
 }
 
 export const formatDueDate = (dueDate: DueDate | null) => {
@@ -219,3 +303,5 @@ export const getStatusColor = (status: TaskStatus) => {
       return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
   }
 }
+
+export const tasks: Task[] = []

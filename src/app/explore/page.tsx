@@ -1,20 +1,13 @@
-"use client";
+"use client"
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Github, ExternalLink, RefreshCw, Plus } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { TaskModal } from "@/components/task-modal";
-import { tasks } from "@/lib/data";
+import { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Github, ExternalLink, RefreshCw, Plus } from "lucide-react"
+import { Badge } from "@/components/ui/badge"
+import { TaskModal } from "@/components/task-modal"
+import { tasks } from "@/lib/data"
 
 // Mock data for external tasks
 const externalTasks = [
@@ -63,57 +56,46 @@ const externalTasks = [
     createdAt: "4 hours ago",
     priority: "High",
   },
-];
+]
 
 export default function ExplorePage() {
-  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-  const [selectedTask, setSelectedTask] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
+  const [selectedTask, setSelectedTask] = useState<any>(null)
+  const [isLoading, setIsLoading] = useState(false)
 
   const handleRefresh = () => {
-    setIsLoading(true);
+    setIsLoading(true)
     // Simulate API call
     setTimeout(() => {
-      setIsLoading(false);
-    }, 1500);
-  };
+      setIsLoading(false)
+    }, 1500)
+  }
 
   const handleImport = (task: any) => {
-    setSelectedTask(task);
-    setIsCreateModalOpen(true);
-  };
+    setSelectedTask(task)
+    setIsCreateModalOpen(true)
+  }
 
   return (
     <div className="container py-6 space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Explore</h1>
-          <p className="text-muted-foreground">
-            Discover and import tasks from external sources
-          </p>
+          <p className="text-muted-foreground">Discover and import tasks from external sources</p>
         </div>
         <Button onClick={handleRefresh} variant="outline" disabled={isLoading}>
-          <RefreshCw
-            className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
-          />
+          <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`} />
           Refresh
         </Button>
       </div>
 
       <Tabs defaultValue="all" className="w-full">
         <TabsList>
-          <TabsTrigger value="all">
-            All Sources ({externalTasks.length})
-          </TabsTrigger>
-          <TabsTrigger value="github">
-            GitHub ({externalTasks.filter((t) => t.source === "GitHub").length})
-          </TabsTrigger>
-          <TabsTrigger value="jira">
-            Jira ({externalTasks.filter((t) => t.source === "Jira").length})
-          </TabsTrigger>
+          <TabsTrigger value="all">All Sources ({externalTasks.length})</TabsTrigger>
+          <TabsTrigger value="github">GitHub ({externalTasks.filter((t) => t.source === "GitHub").length})</TabsTrigger>
+          <TabsTrigger value="jira">Jira ({externalTasks.filter((t) => t.source === "Jira").length})</TabsTrigger>
           <TabsTrigger value="requests">
-            Requests (
-            {externalTasks.filter((t) => t.source === "Request").length})
+            Requests ({externalTasks.filter((t) => t.source === "Request").length})
           </TabsTrigger>
         </TabsList>
 
@@ -124,20 +106,13 @@ export default function ExplorePage() {
                 <CardHeader className="pb-2">
                   <div className="flex justify-between items-start">
                     <CardTitle className="text-lg">{task.title}</CardTitle>
-                    {task.source === "GitHub" && (
-                      <Github className="h-5 w-5 text-muted-foreground" />
-                    )}
-                    {task.source === "Jira" && (
-                      <ExternalLink className="h-5 w-5 text-muted-foreground" />
-                    )}
+                    {task.source === "GitHub" && <Github className="h-5 w-5 text-muted-foreground" />}
+                    {task.source === "Jira" && <ExternalLink className="h-5 w-5 text-muted-foreground" />}
                   </div>
                   <CardDescription>
-                    {task.source === "GitHub" &&
-                      `${task.repo} • ${task.createdAt}`}
-                    {task.source === "Jira" &&
-                      `${task.project} • ${task.createdAt}`}
-                    {task.source === "Request" &&
-                      `From: ${task.requester} • ${task.createdAt}`}
+                    {task.source === "GitHub" && `${task.repo} • ${task.createdAt}`}
+                    {task.source === "Jira" && `${task.project} • ${task.createdAt}`}
+                    {task.source === "Request" && `From: ${task.requester} • ${task.createdAt}`}
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
@@ -148,18 +123,11 @@ export default function ExplorePage() {
                           {label}
                         </Badge>
                       ))}
-                    {task.priority && (
-                      <Badge variant="outline">{task.priority}</Badge>
-                    )}
+                    {task.priority && <Badge variant="outline">{task.priority}</Badge>}
                   </div>
                 </CardContent>
                 <CardFooter>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="w-full"
-                    onClick={() => handleImport(task)}
-                  >
+                  <Button variant="default" size="sm" className="w-full" onClick={() => handleImport(task)}>
                     <Plus className="mr-2 h-4 w-4" />
                     Import to Backlog
                   </Button>
@@ -195,12 +163,7 @@ export default function ExplorePage() {
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleImport(task)}
-                    >
+                    <Button variant="default" size="sm" className="w-full" onClick={() => handleImport(task)}>
                       <Plus className="mr-2 h-4 w-4" />
                       Import to Backlog
                     </Button>
@@ -227,18 +190,11 @@ export default function ExplorePage() {
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
-                      {task.priority && (
-                        <Badge variant="outline">{task.priority}</Badge>
-                      )}
+                      {task.priority && <Badge variant="outline">{task.priority}</Badge>}
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleImport(task)}
-                    >
+                    <Button variant="default" size="sm" className="w-full" onClick={() => handleImport(task)}>
                       <Plus className="mr-2 h-4 w-4" />
                       Import to Backlog
                     </Button>
@@ -262,18 +218,11 @@ export default function ExplorePage() {
                   </CardHeader>
                   <CardContent>
                     <div className="flex flex-wrap gap-2">
-                      {task.priority && (
-                        <Badge variant="outline">{task.priority}</Badge>
-                      )}
+                      {task.priority && <Badge variant="outline">{task.priority}</Badge>}
                     </div>
                   </CardContent>
                   <CardFooter>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      className="w-full"
-                      onClick={() => handleImport(task)}
-                    >
+                    <Button variant="default" size="sm" className="w-full" onClick={() => handleImport(task)}>
                       <Plus className="mr-2 h-4 w-4" />
                       Import to Backlog
                     </Button>
@@ -288,7 +237,7 @@ export default function ExplorePage() {
         open={isCreateModalOpen}
         onOpenChange={setIsCreateModalOpen}
         onSubmit={(data) => {
-          console.log("Import task:", data);
+          console.log("Import task:", data)
           // In a real app, this would create a new task from the external source
         }}
         defaultValues={
@@ -298,22 +247,18 @@ export default function ExplorePage() {
                 body: `Imported from ${selectedTask.source}`,
                 status: "Backlog",
                 priority:
-                  selectedTask.priority === "High"
-                    ? "Major"
-                    : selectedTask.priority === "Medium"
-                    ? "Normal"
-                    : "Minor",
+                  selectedTask.priority === "High" ? "Major" : selectedTask.priority === "Medium" ? "Normal" : "Minor",
                 source:
                   selectedTask.source === "GitHub"
                     ? "GitHub PR"
                     : selectedTask.source === "Jira"
-                    ? "Jira Issue"
-                    : "Manual",
+                      ? "Jira Issue"
+                      : "Manual",
               }
             : undefined
         }
         parentTasks={tasks.filter((task) => !task.parentId)}
       />
     </div>
-  );
+  )
 }
