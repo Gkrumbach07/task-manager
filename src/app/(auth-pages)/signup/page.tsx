@@ -15,7 +15,7 @@ import { ClipboardList } from "lucide-react";
 import { Message } from "@/components/form-message";
 import { FormMessage } from "@/components/form-message";
 import { SubmitButton } from "@/components/submit-button";
-import { signUpAction } from "@/lib/actions/auth";
+import { signUpAction } from "@/lib/auth/actions";
 
 export default async function Signup(props: {
   searchParams: Promise<Message>;

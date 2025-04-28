@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { ClipboardList } from "lucide-react";
 import { FormMessage, Message } from "@/components/form-message";
-import { signInAction } from "@/lib/actions/auth";
+import { signInAction } from "@/lib/auth/actions";
 import { SubmitButton } from "@/components/submit-button";
 
 export default async function Login(props: { searchParams: Promise<Message> }) {

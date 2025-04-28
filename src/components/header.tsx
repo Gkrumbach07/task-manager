@@ -12,16 +12,20 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Bell, ClipboardList, LogOut } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { createClient } from "@/utils/supabase/server";
+import { createSupabaseClient } from "@/lib/prisma/server";
 import NavLink from "./nav-link";
-import { signOutAction } from "@/lib/actions/auth";
+import { signOutAction } from "@/lib/auth/actions";
+import { SettingsModalTrigger } from "./settings-modal-trigger";
+import { getProfile } from "@/lib/profile/services/queries";
 
 export default async function Header() {
-  const supabase = await createClient();
+  const supabase = await createSupabaseClient();
 
   const {
     data: { user },
   } = await supabase.auth.getUser();
+
+  const userProfile = await getProfile();
 
   // Get user initials for avatar
   const getUserInitials = () => {
@@ -75,6 +79,7 @@ export default async function Header() {
                   </p>
                 </div>
               </DropdownMenuLabel>
+              <SettingsModalTrigger userProfile={userProfile} />
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOutAction}>
                 <LogOut className="mr-2 h-4 w-4" />

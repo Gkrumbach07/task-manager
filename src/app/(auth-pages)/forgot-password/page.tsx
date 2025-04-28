@@ -14,7 +14,7 @@ import {
 import { ClipboardList } from "lucide-react";
 import { FormMessage, Message } from "@/components/form-message";
 import { SubmitButton } from "@/components/submit-button";
-import { resetPasswordAction } from "@/lib/actions/auth";
+import { resetPasswordAction } from "@/lib/auth/actions";
 
 export default async function ForgotPassword(props: {
   searchParams: Promise<Message>;

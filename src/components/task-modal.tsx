@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
+import { z } from "zod";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,143 +40,200 @@ import { format } from "date-fns";
 import { CalendarIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useForm } from "react-hook-form";
-import { z } from "zod";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { createTask, updateTask, type Task } from "@/lib/queries/tasks";
-import { useToast } from "@/hooks/use-toast";
-import { useEffect, useCallback } from "react";
-import { getTasks } from "@/lib/queries/tasks";
+import { createTask, updateTask } from "@/lib/tasks/services/mutations";
 
+import { useToast } from "@/hooks/use-toast";
+import { DueDateType, TaskPriority, TaskStatus } from "@/lib/tasks/enums";
+import type {
+  CreateTaskDto,
+  TaskDto,
+  UpdateTaskDto,
+} from "@/lib/tasks/schemas";
+
+// Define the schema for the form input
 const formSchema = z.object({
   title: z.string().min(1, "Title is required"),
   body: z.string().nullable(),
-  parentId: z.string().nullable(),
   dueDate: z
     .object({
-      type: z.enum(["date", "quarter", "sprint", "year"]),
-      value: z.union([z.string(), z.number()]),
+      type: z.nativeEnum(DueDateType),
+      value: z.union([z.date(), z.number().min(1), z.string()]).nullable(), // Allow string for initial empty state from inputs maybe? Or handle better?
     })
-    .nullable(),
-  status: z.enum(["Backlog", "Active", "Done", "Canceled"]),
-  source: z.string().nullable(),
-  priority: z.enum(["Minor", "Normal", "Major", "Critical"]),
+    .nullable()
+    .refine(
+      (data) => {
+        if (!data) return true; // Allow null
+        if (data.type === DueDateType.DATE && data.value instanceof Date)
+          return true;
+        if (
+          data.type === DueDateType.QUARTER &&
+          typeof data.value === "number" &&
+          data.value >= 1 &&
+          data.value <= 4
+        )
+          return true;
+        if (
+          data.type === DueDateType.SPRINT &&
+          typeof data.value === "number" &&
+          data.value >= 1
+        )
+          return true;
+        if (
+          data.type === DueDateType.YEAR &&
+          typeof data.value === "number" &&
+          data.value >= new Date().getFullYear() - 10
+        )
+          return true; // Allow some past years too
+        return false;
+      },
+      { message: "Invalid due date value for the selected type." }
+    ),
+  status: z.nativeEnum(TaskStatus),
+  source: z.string().url("Invalid URL format").nullable().or(z.literal("")), // Allow empty string from input
+  priority: z.nativeEnum(TaskPriority),
 });
 
-type FormValues = z.infer<typeof formSchema>;
+// Infer the type from the schema
+type TaskFormInput = z.infer<typeof formSchema>;
 
-interface TaskModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onSubmit?: (task: Task) => void;
-  defaultValues?: Partial<Task>;
-  parentTasks?: Task[];
-}
+// Define props for the modal, including open state and handler
+type TaskModalProps = {
+  onSubmit?: (task: TaskDto) => void;
+  onClose?: () => void;
+  defaultValues?: Partial<TaskDto>;
+};
 
 export function TaskModal({
-  open,
-  onOpenChange,
   onSubmit,
+  onClose,
   defaultValues,
-  parentTasks: initialParentTasks = [],
 }: TaskModalProps) {
-  const [dueDateType, setDueDateType] = useState<
-    "date" | "quarter" | "sprint" | "year"
-  >(defaultValues?.dueDate?.type || "date");
+  const [dueDateType, setDueDateType] = useState<DueDateType>(
+    defaultValues?.dueDate?.type || DueDateType.DATE
+  );
   const [isLoading, setIsLoading] = useState(false);
-  const [parentTasks, setParentTasks] = useState<Task[]>(initialParentTasks);
   const { toast } = useToast();
 
-  const form = useForm<FormValues>({
+  const form = useForm<TaskFormInput>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      // Set default values directly in useForm
       title: defaultValues?.title || "",
       body: defaultValues?.body || "",
-      parentId: defaultValues?.parentId || null,
-      dueDate: defaultValues?.dueDate || null,
-      status: defaultValues?.status || "Backlog",
+      // Ensure dueDate structure matches TaskFormInput expectation
+      dueDate: defaultValues?.dueDate
+        ? {
+            type: defaultValues.dueDate.type,
+            // Convert value based on type if necessary, especially for Date
+            value:
+              defaultValues.dueDate.type === DueDateType.DATE &&
+              typeof defaultValues.dueDate.value === "string"
+                ? new Date(defaultValues.dueDate.value)
+                : defaultValues.dueDate.value,
+          }
+        : null,
+      status: defaultValues?.status || TaskStatus.BACKLOG,
       source: defaultValues?.source || null,
-      priority: defaultValues?.priority || "Normal",
+      priority: defaultValues?.priority || TaskPriority.NORMAL,
     },
   });
 
-  // Load potential parent tasks if not provided
-  const loadParentTasks = useCallback(async () => {
-    if (initialParentTasks.length === 0) {
-      try {
-        const allTasks = await getTasks();
-        // Filter out tasks that could be parents (no parent themselves)
-        const potentialParents = allTasks.filter((task) => !task.parentId);
-        setParentTasks(potentialParents);
-      } catch (error) {
-        console.error("Error loading parent tasks:", error);
-      }
-    }
-  }, [initialParentTasks]);
-
-  useEffect(() => {
-    if (open) {
-      loadParentTasks();
-    }
-  }, [open, loadParentTasks]);
-
-  const handleSubmit = async (values: FormValues) => {
-    setIsLoading(true);
-    try {
-      let task: Task | null;
-
-      // Convert empty source string to null
-      const processedValues = {
-        ...values,
-        source: values.source?.trim() || null,
-      };
-
-      if (defaultValues?.id) {
-        // Update existing task
-        task = await updateTask(defaultValues.id, processedValues);
-        if (task) {
-          toast({
-            title: "Task updated",
-            description: "Your task has been updated successfully.",
-          });
+  // Function to transform form data into DTO for API calls
+  const transformFormDataToDto = (data: TaskFormInput) => {
+    const dueDate = data.dueDate?.value
+      ? {
+          type: data.dueDate.type,
+          value: data.dueDate.value.toString(),
         }
-      } else {
-        // Create new task
-        task = await createTask(
-          processedValues as Omit<Task, "id" | "createdDate" | "userId">
-        );
-        if (task) {
-          toast({
-            title: "Task created",
-            description: "Your new task has been created successfully.",
-          });
-        }
-      }
+      : null;
 
-      if (!task) {
-        throw new Error("Failed to save task");
-      }
-
-      onOpenChange(false);
-      form.reset();
-
-      // Notify parent component
-      if (onSubmit) {
-        onSubmit(task);
-      }
-    } catch (error) {
-      console.error("Error saving task:", error);
-      toast({
-        title: "Error",
-        description: "There was a problem saving your task. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsLoading(false);
-    }
+    return {
+      title: data.title,
+      body: data.body || null,
+      dueDate,
+      status: data.status,
+      source: data.source || null,
+      priority: data.priority,
+    };
   };
 
+  const handleSubmit = useCallback(
+    async (values: TaskFormInput) => {
+      setIsLoading(true);
+      let success = false;
+      let resultingTask: TaskDto | null = null;
+
+      const transformedData = transformFormDataToDto(values);
+
+      try {
+        if (defaultValues?.id) {
+          const updatePayload: UpdateTaskDto = {
+            id: defaultValues.id,
+            ...transformedData,
+          };
+          resultingTask = await updateTask(updatePayload);
+          if (resultingTask) {
+            toast({
+              title: "Task updated",
+              description: "Your task has been updated successfully.",
+            });
+            success = true;
+          }
+        } else {
+          // Create task
+          const createPayload: CreateTaskDto = transformedData;
+          resultingTask = await createTask(createPayload);
+          if (resultingTask) {
+            toast({
+              title: "Task created",
+              description: "Your new task has been created successfully.",
+            });
+            success = true;
+          }
+        }
+
+        if (success && resultingTask) {
+          onClose?.();
+          if (onSubmit) {
+            onSubmit(resultingTask);
+          }
+        } else if (!resultingTask) {
+          throw new Error(
+            `Failed to ${
+              defaultValues?.id ? "update" : "create"
+            } task. API might have returned no data.`
+          );
+        }
+      } catch (error) {
+        console.error(
+          `Error ${defaultValues?.id ? "updating" : "creating"} task:`,
+          error
+        );
+        toast({
+          title: "Error",
+          description:
+            error instanceof Error
+              ? error.message
+              : "An unknown error occurred while saving the task.",
+          variant: "destructive",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [defaultValues?.id, toast, onClose, onSubmit]
+  );
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog
+      open={true}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose?.();
+        }
+      }}
+    >
       <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
@@ -244,10 +302,13 @@ export function TaskModal({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Minor">Minor</SelectItem>
-                      <SelectItem value="Normal">Normal</SelectItem>
-                      <SelectItem value="Major">Major</SelectItem>
-                      <SelectItem value="Critical">Critical</SelectItem>
+                      {Object.values(TaskPriority).map((priority) => (
+                        <SelectItem key={priority} value={priority}>
+                          {/* Optionally map to more readable names if needed */}
+                          {priority.charAt(0).toUpperCase() +
+                            priority.slice(1).toLowerCase()}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                   <FormMessage />
@@ -271,63 +332,15 @@ export function TaskModal({
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
-                      <SelectItem value="Backlog">Backlog</SelectItem>
-                      <SelectItem value="Active">Active</SelectItem>
+                      {Object.values(TaskStatus).map((status) => (
+                        <SelectItem key={status} value={status}>
+                          {/* Optionally map to more readable names if needed */}
+                          {status.charAt(0).toUpperCase() +
+                            status.slice(1).toLowerCase()}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="parentId"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Parent Task</FormLabel>
-                  <div className="flex items-center gap-2">
-                    <Select
-                      onValueChange={field.onChange}
-                      defaultValue={field.value || ""}
-                      disabled={parentTasks.length === 0}
-                    >
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue
-                            placeholder={
-                              parentTasks.length === 0
-                                ? "No available parent tasks"
-                                : "Select parent task"
-                            }
-                          />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {parentTasks.map((task) => (
-                          <SelectItem key={task.id} value={task.id}>
-                            {task.title}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    {field.value && (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        className="h-8 px-2 text-muted-foreground hover:text-destructive"
-                        onClick={() => field.onChange(null)}
-                      >
-                        <span className="sr-only">Remove parent task</span>
-                        <span className="flex items-center">X</span>
-                      </Button>
-                    )}
-                  </div>
-
-                  <FormDescription>
-                    Optionally assign this task to a parent task/project.
-                  </FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -362,21 +375,24 @@ export function TaskModal({
                 <FormItem className="flex flex-col">
                   <FormLabel>Due Date</FormLabel>
                   <Tabs
-                    defaultValue={dueDateType}
+                    value={dueDateType}
                     onValueChange={(value) =>
-                      setDueDateType(
-                        value as "date" | "quarter" | "sprint" | "year"
-                      )
+                      setDueDateType(value as DueDateType)
                     }
                     className="w-full"
                   >
                     <TabsList className="grid grid-cols-4">
-                      <TabsTrigger value="date">Date</TabsTrigger>
-                      <TabsTrigger value="quarter">Quarter</TabsTrigger>
-                      <TabsTrigger value="sprint">Sprint</TabsTrigger>
-                      <TabsTrigger value="year">Year</TabsTrigger>
+                      <TabsTrigger value={DueDateType.DATE}>Date</TabsTrigger>
+                      <TabsTrigger value={DueDateType.QUARTER}>
+                        Quarter
+                      </TabsTrigger>
+                      <TabsTrigger value={DueDateType.SPRINT}>
+                        Sprint
+                      </TabsTrigger>
+                      <TabsTrigger value={DueDateType.YEAR}>Year</TabsTrigger>
                     </TabsList>
-                    <TabsContent value="date" className="pt-4">
+
+                    <TabsContent value={DueDateType.DATE} className="pt-4">
                       <Popover>
                         <PopoverTrigger asChild>
                           <FormControl>
@@ -387,11 +403,9 @@ export function TaskModal({
                                 !field.value && "text-muted-foreground"
                               )}
                             >
-                              {field.value && field.value.type === "date" ? (
-                                format(
-                                  new Date(field.value.value as string),
-                                  "PPP"
-                                )
+                              {field.value?.type === DueDateType.DATE &&
+                              field.value.value instanceof Date ? (
+                                format(field.value.value, "PPP")
                               ) : (
                                 <span>Pick a date</span>
                               )}
@@ -403,37 +417,46 @@ export function TaskModal({
                           <Calendar
                             mode="single"
                             selected={
-                              field.value?.type === "date"
-                                ? new Date(field.value.value as string)
+                              field.value?.type === DueDateType.DATE &&
+                              field.value.value instanceof Date
+                                ? field.value.value
                                 : undefined
                             }
-                            onSelect={(date) =>
-                              field.onChange(
+                            onSelect={(date) => {
+                              // Trigger revalidation on select
+                              form.setValue(
+                                "dueDate",
                                 date
-                                  ? {
-                                      type: "date",
-                                      value: date.toISOString().split("T")[0],
-                                    }
-                                  : null
-                              )
-                            }
+                                  ? { type: DueDateType.DATE, value: date }
+                                  : null,
+                                { shouldValidate: true }
+                              );
+                              // Manually set the tab state if needed, though it should be controlled by the outer Tabs state
+                              if (date) setDueDateType(DueDateType.DATE);
+                            }}
                             initialFocus
                           />
                         </PopoverContent>
                       </Popover>
                     </TabsContent>
-                    <TabsContent value="quarter" className="pt-4">
+
+                    <TabsContent value={DueDateType.QUARTER} className="pt-4">
                       <Select
-                        onValueChange={(value) =>
+                        onValueChange={(value) => {
+                          const numValue = value
+                            ? Number.parseInt(value)
+                            : null;
                           field.onChange({
-                            type: "quarter",
-                            value: Number.parseInt(value),
-                          })
-                        }
-                        defaultValue={
-                          field.value?.type === "quarter"
+                            type: DueDateType.QUARTER,
+                            value: numValue,
+                          });
+                          // Manually set the tab state
+                          if (value) setDueDateType(DueDateType.QUARTER);
+                        }}
+                        value={
+                          field.value?.type === DueDateType.QUARTER
                             ? String(field.value.value)
-                            : undefined
+                            : ""
                         }
                       >
                         <FormControl>
@@ -449,43 +472,59 @@ export function TaskModal({
                         </SelectContent>
                       </Select>
                     </TabsContent>
-                    <TabsContent value="sprint" className="pt-4">
+
+                    <TabsContent value={DueDateType.SPRINT} className="pt-4">
                       <FormControl>
                         <Input
                           type="number"
                           placeholder="Sprint number"
                           min={1}
-                          defaultValue={
-                            field.value?.type === "sprint"
+                          value={
+                            field.value?.type === DueDateType.SPRINT &&
+                            typeof field.value.value === "number"
                               ? field.value.value
                               : ""
                           }
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const numValue = e.target.value
+                              ? Number.parseInt(e.target.value)
+                              : null;
                             field.onChange({
-                              type: "sprint",
-                              value: Number.parseInt(e.target.value),
-                            })
-                          }
+                              type: DueDateType.SPRINT,
+                              value: numValue,
+                            });
+                            // Manually set the tab state
+                            if (e.target.value)
+                              setDueDateType(DueDateType.SPRINT);
+                          }}
                         />
                       </FormControl>
                     </TabsContent>
-                    <TabsContent value="year" className="pt-4">
+
+                    <TabsContent value={DueDateType.YEAR} className="pt-4">
                       <FormControl>
                         <Input
                           type="number"
                           placeholder="Year"
-                          min={2023}
-                          defaultValue={
-                            field.value?.type === "year"
+                          min={new Date().getFullYear() - 5}
+                          value={
+                            field.value?.type === DueDateType.YEAR &&
+                            typeof field.value.value === "number"
                               ? field.value.value
-                              : new Date().getFullYear()
+                              : ""
                           }
-                          onChange={(e) =>
+                          onChange={(e) => {
+                            const numValue = e.target.value
+                              ? Number.parseInt(e.target.value)
+                              : null;
                             field.onChange({
-                              type: "year",
-                              value: Number.parseInt(e.target.value),
-                            })
-                          }
+                              type: DueDateType.YEAR,
+                              value: numValue,
+                            });
+                            // Manually set the tab state
+                            if (e.target.value)
+                              setDueDateType(DueDateType.YEAR);
+                          }}
                         />
                       </FormControl>
                     </TabsContent>
@@ -499,6 +538,14 @@ export function TaskModal({
             />
 
             <DialogFooter>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => onClose?.()}
+                disabled={isLoading}
+              >
+                Cancel
+              </Button>
               <Button type="submit" disabled={isLoading}>
                 {isLoading ? (
                   <>

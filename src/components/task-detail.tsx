@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -11,7 +10,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { TaskModal } from "@/components/task-modal";
 import {
   ArrowLeft,
@@ -19,35 +17,27 @@ import {
   Clock,
   Edit,
   ExternalLink,
-  Folder,
   Github,
 } from "lucide-react";
-import {
-  type Task,
-  formatDueDate,
-  getPriorityColor,
-  getStatusColor,
-  updateTask,
-} from "@/lib/queries/tasks";
 import { Markdown } from "@/components/markdown";
 import { useToast } from "@/hooks/use-toast";
+import { getPriorityColor, getStatusColor, formatDueDate } from "@/lib/utils";
+import { useRouter } from "next/navigation";
+import { updateTask } from "@/lib/tasks/services/mutations";
+import { TaskDto } from "@/lib/tasks/schemas";
+import { TaskStatus } from "@/lib/tasks/enums";
 
 type TaskDetailProps = {
-  task: Task;
-  parentTask?: Task | null;
-  childTasks?: Task[];
+  task: TaskDto;
 };
 
-export function TaskDetail({
-  task,
-  parentTask,
-  childTasks = [],
-}: TaskDetailProps) {
+export function TaskDetail({ task }: TaskDetailProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [currentTask, setCurrentTask] = useState(task);
   const { toast } = useToast();
+  const router = useRouter();
 
-  const renderSourceIcon = (source: Task["source"]) => {
+  const renderSourceIcon = (source: TaskDto["source"]) => {
     if (!source) return null;
 
     switch (source) {
@@ -62,7 +52,10 @@ export function TaskDetail({
 
   const handleDescriptionSave = async (newContent: string) => {
     try {
-      const updatedTask = await updateTask(task.id, { body: newContent });
+      const updatedTask = await updateTask({
+        id: task.id,
+        body: newContent,
+      });
       if (updatedTask) {
         setCurrentTask(updatedTask);
         toast({
@@ -85,13 +78,16 @@ export function TaskDetail({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <Button variant="ghost" size="sm" asChild>
-          <Link
-            href={currentTask.status === "Active" ? "/active" : "/backlog"}
-            className="flex items-center gap-2"
+          <a
+            onClick={() => {
+              router.back();
+            }}
+            className="flex items-center gap-2 cursor-pointer"
+            href="#"
           >
             <ArrowLeft className="h-4 w-4" />
             Back
-          </Link>
+          </a>
         </Button>
         <Button
           variant="outline"
@@ -122,7 +118,7 @@ export function TaskDetail({
               )}
               <Badge variant="outline" className="flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
-                Created: {currentTask.createdDate.toLocaleDateString()}
+                Created: {currentTask.createdAt.toLocaleDateString()}
               </Badge>
               {currentTask.source && (
                 <Badge variant="outline" className="flex items-center gap-1">
@@ -130,100 +126,43 @@ export function TaskDetail({
                   {currentTask.source}
                 </Badge>
               )}
-              {parentTask && (
-                <Badge variant="outline" className="flex items-center gap-1">
-                  <Folder className="h-3 w-3" />
-                  Parent: {parentTask.title}
-                </Badge>
-              )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs defaultValue="description" className="w-full">
-            <TabsList>
-              <TabsTrigger value="description">Description</TabsTrigger>
-              {childTasks.length > 0 && (
-                <TabsTrigger value="subtasks">
-                  Sub-tasks ({childTasks.length})
-                </TabsTrigger>
-              )}
-            </TabsList>
-            <TabsContent value="description" className="pt-4">
-              <div className="prose dark:prose-invert max-w-none">
-                <Markdown
-                  content={currentTask.body || ""}
-                  onSave={handleDescriptionSave}
-                />
-              </div>
-            </TabsContent>
-            {childTasks.length > 0 && (
-              <TabsContent value="subtasks" className="pt-4">
-                <div className="space-y-4">
-                  {childTasks.map((childTask) => (
-                    <Card key={childTask.id}>
-                      <CardContent className="p-4">
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <Link
-                              href={`/task/${childTask.id}`}
-                              className="font-medium hover:underline"
-                            >
-                              {childTask.title}
-                            </Link>
-                            <div className="mt-1 flex flex-wrap gap-2">
-                              <Badge
-                                className={getPriorityColor(childTask.priority)}
-                              >
-                                {childTask.priority}
-                              </Badge>
-                              <Badge
-                                className={getStatusColor(childTask.status)}
-                              >
-                                {childTask.status}
-                              </Badge>
-                            </div>
-                          </div>
-                          <Button variant="outline" size="sm" asChild>
-                            <Link href={`/task/${childTask.id}`}>View</Link>
-                          </Button>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  ))}
-                </div>
-              </TabsContent>
-            )}
-          </Tabs>
+          <Markdown
+            content={currentTask.body || ""}
+            onSave={handleDescriptionSave}
+          />
         </CardContent>
         <CardFooter className="flex justify-between">
           <div className="text-sm text-muted-foreground">
             Task ID: {currentTask.id}
           </div>
           <div className="flex gap-2">
-            {currentTask.status === "Backlog" && (
+            {currentTask.status === TaskStatus.BACKLOG && (
               <Button variant="default">Move to Active</Button>
             )}
-            {currentTask.status === "Active" && (
+            {currentTask.status === TaskStatus.ACTIVE && (
               <Button variant="default">Mark as Done</Button>
             )}
-            {(currentTask.status === "Backlog" ||
-              currentTask.status === "Active") && (
+            {(currentTask.status === TaskStatus.BACKLOG ||
+              currentTask.status === TaskStatus.ACTIVE) && (
               <Button variant="outline">Cancel Task</Button>
             )}
           </div>
         </CardFooter>
       </Card>
 
-      <TaskModal
-        open={isEditModalOpen}
-        onOpenChange={setIsEditModalOpen}
-        onSubmit={(data) => {
-          console.log("Update task:", data);
-          // In a real app, this would update the task
-        }}
-        defaultValues={currentTask}
-      />
+      {isEditModalOpen && (
+        <TaskModal
+          onSubmit={(data) => {
+            console.log("Update task:", data);
+          }}
+          onClose={() => setIsEditModalOpen(false)}
+          defaultValues={currentTask}
+        />
+      )}
     </div>
   );
 }
