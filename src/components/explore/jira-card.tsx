@@ -21,7 +21,6 @@ import type { CreateTaskDto, TaskDto } from "@/lib/tasks/schemas";
 import { TaskPriority, TaskStatus } from "@/lib/tasks/enums";
 import { formatDistanceToNow } from "date-fns";
 import { JiraJqlQueryDto } from "@/lib/jira-jql-queries/schemas";
-import { cn } from "@/lib/utils";
 import {
   Tooltip,
   TooltipProvider,
@@ -56,20 +55,14 @@ const mapJiraPriorityToTaskPriority = (
 };
 
 // Translates JiraDto to CreateTaskDto for quick create
-const jiraToCreateTaskDto = (issue: JiraDto): CreateTaskDto => {
-  const title = `${issue.key}: ${
-    issue.description?.substring(0, 80) || "No description"
-  }${issue.description && issue.description.length > 80 ? "..." : ""}`;
-
-  return {
-    title: title,
-    body: issue.description || null,
-    dueDate: null,
-    status: TaskStatus.BACKLOG,
-    source: issue.url,
-    priority: mapJiraPriorityToTaskPriority(issue.priority),
-  };
-};
+const jiraToCreateTaskDto = (issue: JiraDto): CreateTaskDto => ({
+  title: issue.title,
+  body: issue.description || null,
+  dueDate: null,
+  status: TaskStatus.BACKLOG,
+  source: issue.key,
+  priority: mapJiraPriorityToTaskPriority(issue.priority),
+});
 
 // Translates JiraDto to partial TaskDto for modal defaults
 const jiraToTaskModalDefaults = (issue: JiraDto): Partial<TaskDto> => {
@@ -82,7 +75,7 @@ const jiraToTaskModalDefaults = (issue: JiraDto): Partial<TaskDto> => {
     body: issue.description || "",
     dueDate: null,
     status: TaskStatus.BACKLOG,
-    source: issue.url,
+    source: issue.key,
     priority: mapJiraPriorityToTaskPriority(issue.priority),
   };
 };
@@ -201,15 +194,15 @@ export function JiraCard({
             {fromJqlQueries &&
               fromJqlQueries.length > 0 &&
               (fromJqlQueries.length === 1 ? (
-                <Badge
-                  variant="outline"
-                  className={cn(
-                    "whitespace-nowrap",
-                    fromJqlQueries[0].labelColor
-                      ? `bg-${fromJqlQueries[0].labelColor}-500`
-                      : undefined
-                  )}
-                >
+                <Badge variant="outline" className={"whitespace-nowrap"}>
+                  <span
+                    className="inline-block h-3 w-3 rounded-sm flex-shrink-0"
+                    style={{
+                      backgroundColor:
+                        fromJqlQueries[0].labelColor ?? undefined,
+                    }}
+                    aria-hidden="true"
+                  />
                   {fromJqlQueries[0].label}
                 </Badge>
               ) : (

@@ -221,12 +221,14 @@ export const useJiraQueries = (): UseJiraQueries => {
       queryDefs.forEach((b) => updateMut.mutate({ id: b.id, enabled })),
     executeAllJqlQueries: () =>
       queryDefs.forEach((b) => {
-		const execution = queryToExecutionMap.get(b.id)
-		if (execution) {
-			execution.refetch()
-		}
-		else{
-			qc.fetchQuery({ queryKey: ["jqlQueryJiras", b.id] })
+		if(b.enabled) {
+			const execution = queryToExecutionMap.get(b.id)
+			if (execution) {
+				execution.refetch()
+			}
+			else {
+					qc.fetchQuery({ queryKey: ["jqlQueryJiras", b.id] })
+			}
 		}
 	  }),
   };

@@ -34,7 +34,7 @@ export function JiraExplorer() {
   );
 
   const { data: sourceToExistingTaskMap } = useQuery({
-    queryKey: ["tasksBySource", allSelectedSourceKeys],
+    queryKey: ["tasksBySource"],
     queryFn: async () => {
       if (allSelectedSourceKeys.length === 0) {
         return new Map<string, TaskDto | null>();

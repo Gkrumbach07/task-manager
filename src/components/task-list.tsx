@@ -6,7 +6,6 @@ import { useRouter } from "next/navigation";
 import {
   Clock,
   ExternalLink,
-  Github,
   MoreHorizontal,
   ArrowRight,
   Check,
@@ -26,6 +25,8 @@ import { useToast } from "@/hooks/use-toast";
 import { updateTaskStatus } from "@/lib/tasks/services";
 import { TaskStatus } from "@/lib/tasks/enums";
 import { TaskDto } from "@/lib/tasks/schemas";
+import { useQuery } from "@tanstack/react-query";
+import { getProfile } from "@/lib/profile/services/queries";
 
 interface TaskListProps {
   tasks: TaskDto[];
@@ -35,6 +36,11 @@ interface TaskListProps {
 export function TaskList({ tasks, showActions = true }: TaskListProps) {
   const router = useRouter();
   const { toast } = useToast();
+
+  const userSettings = useQuery({
+    queryKey: ["userProfile"],
+    queryFn: () => getProfile(),
+  });
 
   const handleStatusUpdate = async (
     taskId: string,
@@ -60,19 +66,6 @@ export function TaskList({ tasks, showActions = true }: TaskListProps) {
     }
   };
 
-  const renderSourceIcon = (source: TaskDto["source"]) => {
-    if (!source) return null;
-
-    switch (source) {
-      case "GitHub PR":
-        return <Github className="h-4 w-4 text-muted-foreground" />;
-      case "Jira Issue":
-        return <ExternalLink className="h-4 w-4 text-muted-foreground" />;
-      default:
-        return null;
-    }
-  };
-
   const handleQuickAction = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation();
     const task = tasks.find((t) => t.id === taskId);
@@ -89,7 +82,6 @@ export function TaskList({ tasks, showActions = true }: TaskListProps) {
     <div className="space-y-6">
       {tasks.map((task) => (
         <div key={task.id} className="space-y-2">
-          <h3 className="font-medium text-lg">{task.title}</h3>
           <div className="space-y-2">
             <Card key={task.id} className="overflow-hidden py-0">
               <CardContent className="p-0">
@@ -123,8 +115,20 @@ export function TaskList({ tasks, showActions = true }: TaskListProps) {
                               variant="outline"
                               className="flex items-center gap-1"
                             >
-                              {renderSourceIcon(task.source)}
-                              {task.source}
+                              {userSettings.isSuccess ? (
+                                <>
+                                  <a
+                                    href={`${userSettings.data?.jiraConfig.baseUrl}/browse/${task.source}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    {task.source}
+                                  </a>
+                                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                </>
+                              ) : (
+                                task.source
+                              )}
                             </Badge>
                           )}
                         </div>
