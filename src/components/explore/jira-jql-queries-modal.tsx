@@ -34,6 +34,7 @@ import type {
   UpdateJiraJqlQueryDto,
 } from "@/lib/jira-jql-queries/schemas";
 import { ColorPicker } from "@/components/ui/color-picker";
+import { useQueryClient } from "@tanstack/react-query";
 
 // Define the schema for the JQL query form input
 const jqlQueryFormSchema = z.object({
@@ -53,9 +54,10 @@ export function JiraJqlQueriesModal({
 }: {
   onOpenChange: (open: boolean) => void;
   onSuccess?: (values: JiraJqlQueryDto) => void;
-  initialData: JiraJqlQueryDto | null;
+  initialData?: JiraJqlQueryDto | null;
 }) {
   const { toast } = useToast();
+  const jc = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
 
   const form = useForm<JqlQueryFormInput>({
@@ -84,6 +86,7 @@ export function JiraJqlQueriesModal({
       }
 
       if (result) {
+        jc.invalidateQueries({ queryKey: ["jqlQueryDefs"] });
         toast({
           title: "Success",
           description: `JQL query ${

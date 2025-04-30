@@ -3,7 +3,6 @@
 import { useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { JiraCard } from "./jira-card";
-import { JiraIssueWithQuery, QueryStatus } from "./types";
 import { JiraQuerySection } from "./jira-query-section";
 import { Skeleton } from "../ui/skeleton";
 import { TaskDto } from "@/lib/tasks/schemas";
@@ -12,14 +11,13 @@ import { hideJiraIssue } from "@/lib/hidden-jiras-issues/services/mutations";
 import { getHiddenJiraIssues } from "@/lib/hidden-jiras-issues/services/queries";
 import { Switch } from "../ui/switch";
 import { Label } from "../ui/label";
+import { useJiraQueries } from "@/hooks/use-jira-queries";
 
 export function JiraExplorer() {
   const queryClient = useQueryClient();
-  const [jiraIssues, setJiraIssues] = useState<JiraIssueWithQuery[]>([]);
-  const [queryStatusMap, setQueryStatusMap] = useState<
-    Map<string, QueryStatus>
-  >(new Map());
   const [showAlreadyLinkedIssues, setShowAlreadyLinkedIssues] = useState(false);
+
+  const { jiras, queries } = useJiraQueries();
 
   const { data: hiddenJiraIssues } = useQuery({
     queryKey: ["hiddenJiraIssues"],
@@ -31,8 +29,8 @@ export function JiraExplorer() {
   }, [hiddenJiraIssues]);
 
   const allSelectedSourceKeys = useMemo(
-    () => jiraIssues.map((issue) => issue.key),
-    [jiraIssues]
+    () => jiras.map((issue) => issue.key),
+    [jiras]
   );
 
   const { data: sourceToExistingTaskMap } = useQuery({
@@ -74,25 +72,21 @@ export function JiraExplorer() {
   const visibleJiraIssues = useMemo(() => {
     // Ensure sourceToExistingTaskMap is not undefined during initial render
     const currentTaskMap = sourceToExistingTaskMap ?? new Map();
-    return jiraIssues.filter(
+    return jiras.filter(
       (issue) =>
         !hiddenJiraIssueKeys.has(issue.key) &&
         (showAlreadyLinkedIssues || !currentTaskMap.get(issue.key))
     );
   }, [
-    jiraIssues,
+    jiras,
     hiddenJiraIssueKeys,
-    sourceToExistingTaskMap, // Dependency added
+    sourceToExistingTaskMap,
     showAlreadyLinkedIssues,
   ]);
 
   return (
     <div className="flex flex-col gap-4">
-      <JiraQuerySection
-        setJiraSelectedIssues={setJiraIssues}
-        setQueryStatusMap={setQueryStatusMap}
-        queryStatusMap={queryStatusMap}
-      />
+      <JiraQuerySection />
       <div className="space-y-3">
         <div className="flex items-center gap-2 justify-between">
           <h3 className="text-lg font-semibold">
@@ -113,7 +107,8 @@ export function JiraExplorer() {
           <div className="grid gap-4 md:grid-cols-1 lg:grid-cols-2 xl:grid-cols-3">
             {visibleJiraIssues.map((issue) => {
               const isLoading = issue.fromJqlQuery.some(
-                (query) => queryStatusMap.get(query.id)?.status === "loading"
+                (query) =>
+                  queries.find((q) => q.query.id === query.id)?.isExecuting
               );
               if (isLoading) {
                 return (
