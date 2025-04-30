@@ -23,6 +23,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 import { JiraJqlQueryDto } from "@/lib/jira-jql-queries/schemas";
 import { useState } from "react";
 import { JiraJqlQueriesModal } from "./jira-jql-queries-modal";
+import React from "react";
 
 export function QueryTableRow({
   query,
@@ -56,11 +57,8 @@ export function QueryTableRow({
   };
 
   return (
-    <>
-      <TableRow
-        key={query.id}
-        data-state={query.enabled ? "selected" : undefined}
-      >
+    <React.Fragment key={query.id}>
+      <TableRow data-state={query.enabled ? "selected" : undefined}>
         <TableCell className="px-2 text-center">
           <Checkbox
             checked={query.enabled}
@@ -206,6 +204,6 @@ export function QueryTableRow({
           onOpenChange={setIsSettingsModalOpen}
         />
       )}
-    </>
+    </React.Fragment>
   );
 }
