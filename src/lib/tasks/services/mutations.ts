@@ -5,6 +5,7 @@ import { TaskStatus } from "../enums";
 import { fromPrisma, toPrismaCreateInput, toPrismaUpdateInput } from "../mappers";
 import { CreateTaskDto, TaskDto, UpdateTaskDto } from "../schemas";
 import { getUserStrict } from "@/lib/auth/actions";
+import { revalidatePath } from "next/cache";
 
 // Create a new task
 export const createTask = async (taskInput: CreateTaskDto): Promise<TaskDto | null> => {
@@ -31,6 +32,7 @@ export const updateTask = async (task: UpdateTaskDto): Promise<TaskDto | null> =
       where: { id: task.id, user_id: user.id },
       data: toPrismaUpdateInput(task),
     });
+    revalidatePath("/");
     return fromPrisma(data);
   } catch (error) {
     console.error("Error updating task:", error);

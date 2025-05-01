@@ -3,6 +3,8 @@
 import { getJiraConfig } from '@/lib/profile/services/queries';
 import { fromJira } from '../mappers';
 import { JiraDto } from '../schemas';
+import { getReadJiraIssues } from '@/lib/read-jiras-issues/services/queries';
+import { unmarkJiraIssuesAsRead } from '@/lib/read-jiras-issues/services/mutations';
 
 export type JiraIssue = {
 	id: string;
@@ -18,11 +20,12 @@ export type JiraIssue = {
 		displayName: string;
 		emailAddress: string;
 	  };
+    customfield_12310220?: string[] // git pull request urls
 	  status: { name: string };
 	  issuetype: { name: string };
 	  description?: string;
 	};
-  };
+};
 
 type JiraSearchResult = {
   expand?: string;
@@ -90,6 +93,7 @@ export async function searchIssuesByJql(
     }
 
     const data: JiraSearchResult = await response.json();
+
     return data.issues.map((issue) => fromJira(issue, baseUrl));
   } catch (error) {
     console.error('Error fetching Jira issues:', error);
@@ -97,3 +101,26 @@ export async function searchIssuesByJql(
   }
 }
 
+export async function searchIssuesByJqlAndUpdateReadJiraIssues(
+  jql: string,
+  startAt?: number,
+  maxResults?: number,
+  fields?: string[],
+) {
+  const issues = await searchIssuesByJql(jql, startAt, maxResults, fields);
+  const lastReadIssues = await getReadJiraIssues();
+  const lastReadIssuesMap = new Map(lastReadIssues?.map((issue) => [issue.issueKey, issue.lastReadUuid]));
+  
+  // compare last_read_uuid with issue updated field
+  const issuesToUpdate = issues
+    .filter((issue) => {
+      const lastRead = lastReadIssuesMap.get(issue.key);
+      const updated = issue.updated;
+      return lastRead !== updated;
+    })
+    .map((issue) => issue.key);
+
+  await unmarkJiraIssuesAsRead(issuesToUpdate);
+  
+  return issues;
+}

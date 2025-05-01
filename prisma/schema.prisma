@@ -21,6 +21,7 @@ model profiles {
   jira_base_url           String?
   jira_user_email         String?
   jira_api_token          String?
+  github_api_token        String?
 }
 
 
@@ -51,8 +52,16 @@ model jira_jql_queries {
 }
 
 model hidden_jira_issues {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id        String   @db.Uuid
-  issue_key      String
+  user_id   String @db.Uuid
+  issue_key String
+
+  @@id([user_id, issue_key])
 }
 
+model read_jira_issues {
+  user_id   String @db.Uuid
+  issue_key String
+  last_read_uuid   String
+  
+  @@id([user_id, issue_key])
+}

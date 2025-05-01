@@ -27,6 +27,8 @@ import { TaskStatus } from "@/lib/tasks/enums";
 import { TaskDto } from "@/lib/tasks/schemas";
 import { useQuery } from "@tanstack/react-query";
 import { getProfile } from "@/lib/profile/services/queries";
+import { TaskModal } from "./task-modal";
+import { useState } from "react";
 
 interface TaskListProps {
   tasks: TaskDto[];
@@ -36,6 +38,7 @@ interface TaskListProps {
 export function TaskList({ tasks, showActions = true }: TaskListProps) {
   const router = useRouter();
   const { toast } = useToast();
+  const [editTask, setEditTask] = useState<TaskDto | null>(null);
 
   const userSettings = useQuery({
     queryKey: ["userProfile"],
@@ -79,148 +82,163 @@ export function TaskList({ tasks, showActions = true }: TaskListProps) {
   };
 
   return (
-    <div className="space-y-6">
-      {tasks.map((task) => (
-        <div key={task.id} className="space-y-2">
-          <div className="space-y-2">
-            <Card key={task.id} className="overflow-hidden py-0">
-              <CardContent className="p-0">
-                <div className="p-4">
-                  <div className="flex items-start justify-between">
-                    <div className="flex items-start gap-2">
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-2">
-                          <Link
-                            href={`/task/${task.id}`}
-                            className="font-medium hover:underline"
-                          >
-                            {task.title}
-                          </Link>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-2 text-sm">
-                          <Badge className={getPriorityColor(task.priority)}>
-                            {task.priority}
-                          </Badge>
-                          {task.dueDate && (
-                            <Badge
-                              variant="outline"
-                              className="flex items-center gap-1"
+    <>
+      <div className="space-y-6">
+        {tasks.map((task) => (
+          <div key={task.id} className="space-y-2">
+            <div className="space-y-2">
+              <Card key={task.id} className="overflow-hidden py-0">
+                <CardContent className="p-0">
+                  <div className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-start gap-2">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <Link
+                              href={`/task/${task.id}`}
+                              className="font-medium hover:underline"
                             >
-                              <Clock className="h-3 w-3" />
-                              {formatDueDate(task.dueDate)}
+                              {task.title}
+                            </Link>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-2 text-sm">
+                            <Badge className={getPriorityColor(task.priority)}>
+                              {task.priority}
                             </Badge>
-                          )}
-                          {task.source && (
-                            <Badge
-                              variant="outline"
-                              className="flex items-center gap-1"
-                            >
-                              {userSettings.isSuccess ? (
-                                <>
-                                  <a
-                                    href={`${userSettings.data?.jiraConfig.baseUrl}/browse/${task.source}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                  >
-                                    {task.source}
-                                  </a>
-                                  <ExternalLink className="h-4 w-4 text-muted-foreground" />
-                                </>
-                              ) : (
-                                task.source
-                              )}
-                            </Badge>
-                          )}
+                            {task.dueDate && (
+                              <Badge
+                                variant="outline"
+                                className="flex items-center gap-1"
+                              >
+                                <Clock className="h-3 w-3" />
+                                {formatDueDate(task.dueDate)}
+                              </Badge>
+                            )}
+                            {task.source && (
+                              <Badge
+                                variant="outline"
+                                className="flex items-center gap-1"
+                              >
+                                {userSettings.isSuccess ? (
+                                  <>
+                                    <a
+                                      href={`${userSettings.data?.jiraConfig.baseUrl}/browse/${task.source}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                    >
+                                      {task.source}
+                                    </a>
+                                    <ExternalLink className="h-4 w-4 text-muted-foreground" />
+                                  </>
+                                ) : (
+                                  task.source
+                                )}
+                              </Badge>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      {/* Quick action button - only for Backlog tasks */}
-                      {task.status === "Backlog" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
-                          onClick={(e) => handleQuickAction(task.id, e)}
-                          title="Move to Active"
-                        >
-                          <ArrowRight className="mr-1 h-4 w-4" />
-                          <span className="text-xs">Move to Active</span>
-                        </Button>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {/* Quick action button - only for Backlog tasks */}
+                        {task.status === "Backlog" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-blue-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-950"
+                            onClick={(e) => handleQuickAction(task.id, e)}
+                            title="Move to Active"
+                          >
+                            <ArrowRight className="mr-1 h-4 w-4" />
+                            <span className="text-xs">Move to Active</span>
+                          </Button>
+                        )}
 
-                      {/* Quick action button - only for Active tasks */}
-                      {task.status === "Active" && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 px-2 text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
-                          onClick={(e) => handleQuickAction(task.id, e)}
-                          title="Mark as Done"
-                        >
-                          <Check className="mr-1 h-4 w-4" />
-                          <span className="text-xs">Mark Done</span>
-                        </Button>
-                      )}
+                        {/* Quick action button - only for Active tasks */}
+                        {task.status === "Active" && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 px-2 text-green-500 hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-950"
+                            onClick={(e) => handleQuickAction(task.id, e)}
+                            title="Mark as Done"
+                          >
+                            <Check className="mr-1 h-4 w-4" />
+                            <span className="text-xs">Mark Done</span>
+                          </Button>
+                        )}
 
-                      {showActions && (
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="h-8 w-8 p-0"
-                            >
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end">
-                            <DropdownMenuItem>
-                              <Link
-                                href={`/task/${task.id}`}
-                                className="flex w-full"
+                        {showActions && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className="h-8 w-8 p-0"
                               >
-                                View Details
-                              </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem>Edit</DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            {task.status === TaskStatus.BACKLOG && (
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                              <DropdownMenuItem>
+                                <Link
+                                  href={`/task/${task.id}`}
+                                  className="flex w-full"
+                                >
+                                  View Details
+                                </Link>
+                              </DropdownMenuItem>
+                              <DropdownMenuItem
+                                onClick={() => setEditTask(task)}
+                              >
+                                Edit
+                              </DropdownMenuItem>
+                              <DropdownMenuSeparator />
+                              {task.status === TaskStatus.BACKLOG && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handleStatusUpdate(
+                                      task.id,
+                                      TaskStatus.ACTIVE
+                                    )
+                                  }
+                                >
+                                  Move to Active
+                                </DropdownMenuItem>
+                              )}
+                              {task.status === "Active" && (
+                                <DropdownMenuItem
+                                  onClick={() =>
+                                    handleStatusUpdate(task.id, TaskStatus.DONE)
+                                  }
+                                >
+                                  Mark as Done
+                                </DropdownMenuItem>
+                              )}
                               <DropdownMenuItem
                                 onClick={() =>
-                                  handleStatusUpdate(task.id, TaskStatus.ACTIVE)
+                                  handleStatusUpdate(
+                                    task.id,
+                                    TaskStatus.CANCELED
+                                  )
                                 }
                               >
-                                Move to Active
+                                Cancel Task
                               </DropdownMenuItem>
-                            )}
-                            {task.status === "Active" && (
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  handleStatusUpdate(task.id, TaskStatus.DONE)
-                                }
-                              >
-                                Mark as Done
-                              </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem
-                              onClick={() =>
-                                handleStatusUpdate(task.id, TaskStatus.CANCELED)
-                              }
-                            >
-                              Cancel Task
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
+            </div>
           </div>
-        </div>
-      ))}
-    </div>
+        ))}
+      </div>
+      {editTask && (
+        <TaskModal defaultValues={editTask} onClose={() => setEditTask(null)} />
+      )}
+    </>
   );
 }

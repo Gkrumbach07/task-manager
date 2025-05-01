@@ -11,7 +11,16 @@ import {
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ExternalLink, Plus, Loader2, ChevronDown } from "lucide-react";
+import {
+  ExternalLink,
+  Plus,
+  Loader2,
+  ChevronDown,
+  MoreVerticalIcon,
+  Check,
+  Archive,
+  Pencil,
+} from "lucide-react";
 import { TaskModal } from "@/components/task-modal";
 import { useToast } from "@/hooks/use-toast";
 import { createTask } from "@/lib/tasks/services/mutations";
@@ -35,6 +44,10 @@ import {
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
 import Link from "next/link";
+import { parsePullRequestUrl } from "@/utils";
+import { JiraFieldFilter } from "./types";
+import { useMutation } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 
 // Helper to map Jira priorities to Task priorities
 const mapJiraPriorityToTaskPriority = (
@@ -80,33 +93,40 @@ const jiraToTaskModalDefaults = (issue: JiraDto): Partial<TaskDto> => {
   };
 };
 
-type JiraFieldFilter = {
-  field: keyof JiraDto;
-  value: unknown;
-};
-
 type JiraCardProps = {
   issue: JiraDto;
   fromJqlQueries?: JiraJqlQueryDto[];
   existingTask?: TaskDto;
+  isUnread: boolean;
   onTaskCreated?: (newTask: TaskDto) => void;
   onFilterSelected?: (filter: JiraFieldFilter) => void;
   onIssueIgnored: (issueKey: string) => Promise<void>;
+  onIssueRead: (issueKey: string, lastReadUuid: string) => Promise<void>;
 } & React.ComponentProps<typeof Card>;
 
 export function JiraCard({
   issue,
   fromJqlQueries,
   existingTask,
+  isUnread,
   onTaskCreated,
   onFilterSelected,
   onIssueIgnored,
+  onIssueRead,
+  className,
   ...props
-}: JiraCardProps) {
+}: JiraCardProps & { className?: string }) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQuickCreating, setIsQuickCreating] = useState(false);
-  const [isIgnoring, setIsIgnoring] = useState(false);
   const { toast } = useToast();
+
+  const { mutate: markIssueAsRead, isPending: isMarkingAsRead } = useMutation({
+    mutationFn: () => onIssueRead(issue.key, issue.updated),
+  });
+
+  const { mutate: ignoreIssue, isPending: isIgnoringIssue } = useMutation({
+    mutationFn: () => onIssueIgnored(issue.key),
+  });
 
   const handleQuickCreate = async () => {
     setIsQuickCreating(true);
@@ -133,12 +153,6 @@ export function JiraCard({
     } finally {
       setIsQuickCreating(false);
     }
-  };
-
-  const handleIgnoreIssue = async () => {
-    setIsIgnoring(true);
-    await onIssueIgnored(issue.key);
-    setIsIgnoring(false);
   };
 
   const handleOpenModal = () => {
@@ -177,18 +191,23 @@ export function JiraCard({
 
   return (
     <>
-      <Card {...props}>
+      <Card className={cn("flex flex-col h-full", className)} {...props}>
         <CardHeader>
-          <div className="flex justify-between items-start gap-2">
-            <CardTitle className="text-base font-semibold">
+          <div className="relative flex justify-between items-start gap-2">
+            <CardTitle className="text-base font-semibold flex items-center gap-2">
+              {isUnread && (
+                <span className="h-3 w-3 rounded-full bg-blue-500" />
+              )}
               <a
                 href={issue.url}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="hover:underline"
               >
-                {issue.key}
-                <ExternalLink className="inline-block h-4 w-4 ml-1 align-middle text-muted-foreground" />
+                <div className="flex items-center gap-2">
+                  {issue.key}
+                  <ExternalLink className="inline-block h-4 w-4 text-muted-foreground" />
+                </div>
               </a>
             </CardTitle>
             {fromJqlQueries &&
@@ -282,6 +301,19 @@ export function JiraCard({
                 </InlineButtonXS>
               </p>
             )}
+            {issue.pullRequestUrl && (
+              <p>
+                Pull Request:{" "}
+                <InlineButtonXS
+                  onClick={() =>
+                    issue.pullRequestUrl &&
+                    window.open(issue.pullRequestUrl, "_blank")
+                  }
+                >
+                  {parsePullRequestUrl(issue.pullRequestUrl)}
+                </InlineButtonXS>
+              </p>
+            )}
             <p>
               Created:{" "}
               {formatDistanceToNow(new Date(issue.created), {
@@ -338,21 +370,45 @@ export function JiraCard({
                 </div>
                 <DropdownMenuContent align="end">
                   <DropdownMenuItem onSelect={handleOpenModal}>
+                    <Pencil className="mr-2 h-4 w-4" />
                     Edit and import
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={isIgnoring}
-                onClick={() => handleIgnoreIssue()}
-              >
-                {isIgnoring && (
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                )}
-                Ignore
-              </Button>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="link" size="icon" disabled={isIgnoringIssue}>
+                    <MoreVerticalIcon className="h-4 w-4" />
+                    <span className="sr-only">Toggle Import Options</span>
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  {isUnread && (
+                    <DropdownMenuItem
+                      disabled={isMarkingAsRead}
+                      onSelect={() => markIssueAsRead()}
+                    >
+                      {isMarkingAsRead ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : (
+                        <Check className="mr-2 h-4 w-4" />
+                      )}
+                      Mark as read
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem
+                    disabled={isIgnoringIssue}
+                    onSelect={() => ignoreIssue()}
+                  >
+                    {isIgnoringIssue ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Archive className="mr-2 h-4 w-4" />
+                    )}
+                    Archive
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
             </>
           )}
         </CardFooter>

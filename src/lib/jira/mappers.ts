@@ -28,5 +28,6 @@ export function fromJira(row: JiraIssue, baseUrl: string): JiraDto {
     status: row.fields.status.name as JiraStatus,
     type: row.fields.issuetype.name as JiraType,
     description: row.fields.description ?? "",
+    pullRequestUrl: row.fields.customfield_12310220?.[0] ?? null,
   };
 }

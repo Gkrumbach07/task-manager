@@ -90,7 +90,7 @@ const formSchema = z.object({
       { message: "Invalid due date value for the selected type." }
     ),
   status: z.nativeEnum(TaskStatus),
-  source: z.string().url("Invalid URL format").nullable().or(z.literal("")), // Allow empty string from input
+  source: z.string().nullable(),
   priority: z.nativeEnum(TaskPriority),
 });
 
@@ -257,7 +257,7 @@ export function TaskModal({
                 <FormItem>
                   <FormLabel>Title</FormLabel>
                   <FormControl>
-                    <Input required placeholder="Task title" {...field} />
+                    <Input placeholder="Task title" {...field} />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -273,7 +273,7 @@ export function TaskModal({
                   <FormControl>
                     <Textarea
                       placeholder="Task description in markdown format"
-                      className="min-h-[100px]"
+                      className="max-h-[100px] resize-none"
                       {...field}
                       value={field.value || ""}
                     />
@@ -351,17 +351,17 @@ export function TaskModal({
               name="source"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Source URL</FormLabel>
+                  <FormLabel>Source</FormLabel>
                   <FormControl>
                     <Input
-                      type="url"
                       placeholder="https://github.com/org/repo/pull/123"
                       {...field}
                       value={field.value || ""}
                     />
                   </FormControl>
                   <FormDescription>
-                    Link to the source of this task (e.g. GitHub PR, Jira issue)
+                    Link or reference to the source of this task (e.g. GitHub
+                    PR, Jira issue key)
                   </FormDescription>
                   <FormMessage />
                 </FormItem>

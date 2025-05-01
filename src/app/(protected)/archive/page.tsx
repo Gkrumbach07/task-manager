@@ -1,3 +1,6 @@
+export const fetchCache = "default-cache";
+export const revalidate = 30;
+
 import { Suspense } from "react";
 import { ArchivedTasksTable } from "@/components/archived-tasks-table";
 import { getTasksByStatus } from "@/lib/tasks/services/queries";

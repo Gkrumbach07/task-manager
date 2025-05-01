@@ -1,7 +1,7 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { Task } from "./tasks/schemas"
 import { TaskPriority, TaskStatus } from "./tasks/enums"
+import { TaskDto } from "./tasks/schemas"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -20,7 +20,7 @@ export const getCurrentTimeInfo = () => {
   }
 }
 
-export const formatDueDate = (dueDate: Task["dueDate"] | null) => {
+export const formatDueDate = (dueDate: TaskDto["dueDate"] | null) => {
   if (!dueDate) return "No due date"
 
   switch (dueDate.type) {

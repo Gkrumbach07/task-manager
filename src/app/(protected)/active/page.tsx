@@ -1,5 +1,5 @@
 export const fetchCache = "default-cache";
-export const revalidate = 30;
+export const revalidate = 0;
 
 import { Suspense } from "react";
 import { TaskList } from "@/components/task-list";
@@ -9,6 +9,7 @@ import { TaskListSkeleton } from "@/components/skeletons/task-list-skeleton";
 import { TaskStatus } from "@/lib/tasks/enums";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getProfile } from "@/lib/profile/services/queries";
+import { QueryClient } from "@tanstack/react-query";
 
 async function ActiveTasksList() {
   const activeTasks = await getTasksByStatus([TaskStatus.ACTIVE]);
@@ -29,7 +30,14 @@ async function getTimeInfo() {
   return dateString;
 }
 
-export default function ActivePage() {
+export default async function ActivePage() {
+  // prefetch
+  const qc = new QueryClient();
+  await qc.prefetchQuery({
+    queryKey: ["tasks", "active"],
+    queryFn: () => getTasksByStatus([TaskStatus.ACTIVE]),
+  });
+
   return (
     <div className="container py-6 space-y-6">
       <div className="flex items-center justify-between">

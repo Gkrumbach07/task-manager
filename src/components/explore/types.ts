@@ -11,3 +11,8 @@ export type JiraQueryExecution = {
   lastExecutedJql: string;
   issues: JiraDto[];
 }
+
+export type JiraFieldFilter = {
+  field: keyof JiraDto;
+  value: unknown;
+};

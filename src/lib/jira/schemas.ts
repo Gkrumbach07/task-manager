@@ -19,5 +19,6 @@ export const jiraDtoSchema = z.object({
   status: z.nativeEnum(JiraStatus),
   type: z.nativeEnum(JiraType),
   description: z.string(),
+  pullRequestUrl: z.string().nullable(),
 });
 export type JiraDto = z.infer<typeof jiraDtoSchema>;

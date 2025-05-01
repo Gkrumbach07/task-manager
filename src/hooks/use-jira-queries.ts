@@ -15,7 +15,7 @@ import {
   updateJqlQuery,
   deleteJqlQuery,
 } from "@/lib/jira-jql-queries/services/mutations";
-import { searchIssuesByJql } from "@/lib/jira/services/queries";
+import { searchIssuesByJqlAndUpdateReadJiraIssues } from "@/lib/jira/services/queries";
 import {
   JiraJqlQueryDto,
   UpdateJiraJqlQueryDto,
@@ -69,7 +69,7 @@ export const useJiraQueries = (): UseJiraQueries => {
     queries: queryDefs.map((b) => ({
       queryKey: ["jqlQueryJiras", b.id],
       queryFn: async () => {
-		const res = await searchIssuesByJql(b.jql);
+		const res = await searchIssuesByJqlAndUpdateReadJiraIssues(b.jql);
 		return {
 			queryId: b.id,
 			lastExecutedJql: b.jql,

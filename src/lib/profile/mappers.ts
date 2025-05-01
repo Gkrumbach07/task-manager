@@ -6,6 +6,7 @@ import {
   type UpdateProfileDto,
   type ProfileDto,
   JiraConfigDto,
+  GithubApiTokenDto,
 } from "./schemas";
 import { calculateCurrentSprint, calculateCurrentQuarter, calculateCurrentSprintStartDate } from "./utils";
 import { decrypt, encrypt } from "../auth/crypto";
@@ -17,9 +18,10 @@ export function toPrismaCreateInput(dto: CreateProfileDto, userId: string): Pris
     first_sprint_start_date: dto.firstSprintStartDate,
     sprint_length_days: dto.sprintLengthDays,
     user_id: userId,
-	jira_base_url: dto.jiraConfig?.baseUrl,
-	jira_user_email: dto.jiraConfig?.userEmail,
-	jira_api_token: dto.jiraConfig?.apiToken ? encrypt(dto.jiraConfig.apiToken) : null,
+    jira_base_url: dto.jiraConfig?.baseUrl,
+    jira_user_email: dto.jiraConfig?.userEmail,
+    jira_api_token: dto.jiraConfig?.apiToken ? encrypt(dto.jiraConfig.apiToken) : null,
+    github_api_token: dto.githubApiToken ? encrypt(dto.githubApiToken) : null,
   };
 }
 
@@ -33,7 +35,8 @@ export function toPrismaUpdateInput(dto: UpdateProfileDto): Prisma.profilesUpdat
   if (dto.sprintLengthDays !== undefined) data.sprint_length_days = dto.sprintLengthDays;
   if (dto.jiraConfig?.baseUrl !== undefined) data.jira_base_url = dto.jiraConfig.baseUrl;
   if (dto.jiraConfig?.userEmail !== undefined) data.jira_user_email = dto.jiraConfig.userEmail;
-  if (dto.jiraConfig?.apiToken !== undefined) data.jira_api_token = dto.jiraConfig.apiToken ? encrypt(dto.jiraConfig.apiToken) : null
+  if (dto.jiraConfig?.apiToken !== undefined) data.jira_api_token = dto.jiraConfig.apiToken ? encrypt(dto.jiraConfig.apiToken) : null;
+  if (dto.githubApiToken !== undefined) data.github_api_token = dto.githubApiToken ? encrypt(dto.githubApiToken) : null;
 
   return data;
 }
@@ -60,6 +63,7 @@ export function fromPrisma(row: PrismaProfile): ProfileDto {
 			userEmail: row.jira_user_email,
 			apiTokenConfigured: row.jira_api_token !== null,
 		},
+    githubApiTokenConfigured: row.github_api_token !== null,
     };
 }
 
@@ -68,5 +72,11 @@ export function fromPrismaJiraConfig(row: PrismaProfile): JiraConfigDto {
 		baseUrl: row.jira_base_url,
 		userEmail: row.jira_user_email,
 		apiToken: row.jira_api_token ? decrypt(row.jira_api_token) : null,
+	};
+}
+
+export function fromPrismaGithubApiToken(row: PrismaProfile): GithubApiTokenDto {
+	return {
+		token: row.github_api_token ? decrypt(row.github_api_token) : null,
 	};
 }
