@@ -1,15 +1,19 @@
-"use server"
+"use cache"
 
 import { getUserStrict } from "@/lib/auth/actions";
-import { fromPrisma, fromPrismaGithubApiToken, fromPrismaJiraConfig } from "../mappers";
-import type { GithubApiTokenDto, JiraConfigDto, ProfileDto } from "../schemas";
+import { fromPrismaGithubApiToken, fromPrismaJiraConfig } from "../mappers";
+import type { GithubApiTokenDto, JiraConfigDto } from "../schemas";
 import { prisma } from "@/lib/prisma/server";
+import { getRawProfile } from "./queries";
+import { cacheTag } from "next/dist/server/use-cache/cache-tag";
 
 
-export async function getRawProfile(userId: string): Promise<ProfileDto | null> {
-    const row = await prisma.profiles.findUnique({ where: { user_id: userId } })
-  
-    return row ? fromPrisma(row) : null
+export async function getCachedProfile(userId: string) {
+    const profile = await getRawProfile(userId)
+    if (profile) {
+        cacheTag("profile", userId)
+    }
+    return profile
 }
 
 export const getJiraConfig = async (): Promise<JiraConfigDto | null> => {

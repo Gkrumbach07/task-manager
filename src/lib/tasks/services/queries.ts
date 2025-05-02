@@ -4,44 +4,44 @@ import { prisma } from "@/lib/prisma/server";
 import { TaskDto } from '../schemas'
 import { TaskStatus } from '../enums'
 import { fromPrisma } from '../mappers'
-import { getUserStrict } from '@/lib/auth/actions'
 
-export const getTasks = async (): Promise<TaskDto[]> => {
-  const user = await getUserStrict()
+export const getRawTasks = async (userId: string): Promise<TaskDto[]> => {
   const rows = await prisma.tasks.findMany({
-    where: { user_id: user.id },
+    where: { user_id: userId },
   })
   return rows.map(fromPrisma)
 }
 
-export const getTasksBySources = async (
-  sources: string[]
+export const getRawTasksBySources = async (
+  sources: string[],
+  userId: string
 ): Promise<TaskDto[]> => {
-  const user = await getUserStrict()
-
   const rows = await prisma.tasks.findMany({
-    where: { source: { in: sources }, user_id: user.id },
+    where: { source: { in: sources }, user_id: userId },
   })
 
   return rows.map(fromPrisma)
 }
 
-export const getTasksByStatus = async (
-  status: TaskStatus | TaskStatus[]
+export const getRawTasksByStatus = async (
+  status: TaskStatus | TaskStatus[],
+  userId: string
 ): Promise<TaskDto[]> => {
-  const user = await getUserStrict()
   const statusArray = Array.isArray(status) ? status : [status]
 
   const rows = await prisma.tasks.findMany({
-    where: { status: { in: statusArray }, user_id: user.id },
+    where: { status: { in: statusArray }, user_id: userId },
   })
 
   return rows.map(fromPrisma)
 }
 
-export const getTaskById = async (id: string): Promise<TaskDto | null> => {
-  const user = await getUserStrict()
-  const row = await prisma.tasks.findUnique({ where: { id, user_id: user.id } })
+export const getRawTaskById = async (id: string, userId: string): Promise<TaskDto> => {
+  const row = await prisma.tasks.findUnique({ where: { id, user_id: userId } })
 
-  return row ? fromPrisma(row) : null
+  if (!row) {
+    throw new Error('Task not found')
+  }
+
+  return fromPrisma(row)
 }

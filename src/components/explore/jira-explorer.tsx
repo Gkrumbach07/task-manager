@@ -20,7 +20,7 @@ import { getReadJiraIssues } from "@/lib/read-jiras-issues/services/queries";
 
 export function JiraExplorer() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<string>("active");
+  const [activeTab, setActiveTab] = useState<string>("all");
   const { jiras, queries } = useJiraQueries();
 
   const { data: hiddenJiraIssues } = useQuery({

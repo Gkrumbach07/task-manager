@@ -4,35 +4,30 @@ import { useState } from "react";
 import { SettingsModal } from "./settings-modal";
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Settings } from "lucide-react";
-import { ProfileDto } from "@/lib/profile/schemas";
-type SettingsModalTriggerProps = {
-  userProfile: ProfileDto | null;
-};
+import { useQuery } from "@tanstack/react-query";
+import { getProfile } from "@/lib/profile/services";
 
-export function SettingsModalTrigger({
-  userProfile,
-}: SettingsModalTriggerProps) {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+export function SettingsModalTrigger() {
+  const [open, setOpen] = useState(false);
+
+  const { data: profile = null } = useQuery({
+    queryKey: ["profile"],
+    queryFn: getProfile,
+    enabled: open,
+  });
 
   return (
     <>
       <DropdownMenuItem
-        onSelect={(e) => {
-          e.preventDefault();
-        }}
-        onClick={() => setIsModalOpen(true)}
+        onClick={() => setOpen(true)}
+        onSelect={(e) => e.preventDefault()}
         className="cursor-pointer"
       >
         <Settings className="mr-2 h-4 w-4" />
         <span>Settings</span>
       </DropdownMenuItem>
 
-      {isModalOpen && (
-        <SettingsModal
-          onOpenChange={setIsModalOpen}
-          initialData={userProfile}
-        />
-      )}
+      {open && <SettingsModal onOpenChange={setOpen} initialData={profile} />}
     </>
   );
 }

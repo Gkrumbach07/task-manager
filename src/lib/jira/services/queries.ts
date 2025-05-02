@@ -96,7 +96,6 @@ export async function searchIssuesByJql(
 
     return data.issues.map((issue) => fromJira(issue, baseUrl));
   } catch (error) {
-    console.error('Error fetching Jira issues:', error);
     throw error; 
   }
 }

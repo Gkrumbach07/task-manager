@@ -1,28 +1,30 @@
 import { TaskDetail } from "@/components/task-detail";
-import { getTaskById } from "@/lib/tasks/services/queries";
+import { getTaskById } from "@/lib/tasks/services";
+import {
+  QueryClient,
+  HydrationBoundary,
+  dehydrate,
+} from "@tanstack/react-query";
+import { notFound } from "next/navigation";
 
-type Props = {
-  params: { id: string };
-};
-
-export default async function TaskPage({ params }: Props) {
+export default async function TaskPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const qc = new QueryClient();
   const { id } = await params;
-  const task = await getTaskById(id);
 
-  if (!task) {
-    return (
-      <div className="container py-12 text-center">
-        <h1 className="text-2xl font-bold mb-4">Task Not Found</h1>
-        <p className="text-muted-foreground">
-          The task you are looking for does not exist or has been deleted.
-        </p>
-      </div>
-    );
-  }
+  const task = await qc.fetchQuery({
+    queryKey: ["tasks", id],
+    queryFn: () => getTaskById(id),
+  });
+
+  if (!task) notFound();
 
   return (
-    <div className="container py-6">
-      <TaskDetail task={task} />
-    </div>
+    <HydrationBoundary state={dehydrate(qc)}>
+      <TaskDetail taskId={id} />
+    </HydrationBoundary>
   );
 }

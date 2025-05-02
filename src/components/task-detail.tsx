@@ -26,16 +26,27 @@ import { useRouter } from "next/navigation";
 import { updateTask } from "@/lib/tasks/services/mutations";
 import { TaskDto } from "@/lib/tasks/schemas";
 import { TaskStatus } from "@/lib/tasks/enums";
+import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
+import { getTaskById } from "@/lib/tasks/services";
 
 type TaskDetailProps = {
-  task: TaskDto;
+  taskId: string;
 };
 
-export function TaskDetail({ task }: TaskDetailProps) {
+export function TaskDetail({ taskId }: TaskDetailProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [currentTask, setCurrentTask] = useState(task);
   const { toast } = useToast();
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  const { data: task } = useSuspenseQuery({
+    queryKey: ["tasks", taskId],
+    queryFn: () => getTaskById(taskId),
+  });
+
+  const invalidateTask = () => {
+    queryClient.invalidateQueries({ queryKey: ["tasks", taskId] });
+  };
 
   const renderSourceIcon = (source: TaskDto["source"]) => {
     if (!source) return null;
@@ -57,7 +68,7 @@ export function TaskDetail({ task }: TaskDetailProps) {
         body: newContent,
       });
       if (updatedTask) {
-        setCurrentTask(updatedTask);
+        invalidateTask();
         toast({
           title: "Success",
           description: "Task description updated successfully.",
@@ -102,52 +113,49 @@ export function TaskDetail({ task }: TaskDetailProps) {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between space-y-0">
           <div>
-            <CardTitle className="text-2xl">{currentTask.title}</CardTitle>
+            <CardTitle className="text-2xl">{task.title}</CardTitle>
             <div className="mt-2 flex flex-wrap gap-2">
-              <Badge className={getPriorityColor(currentTask.priority)}>
-                {currentTask.priority}
+              <Badge className={getPriorityColor(task.priority)}>
+                {task.priority}
               </Badge>
-              <Badge className={getStatusColor(currentTask.status)}>
-                {currentTask.status}
+              <Badge className={getStatusColor(task.status)}>
+                {task.status}
               </Badge>
-              {currentTask.dueDate && (
+              {task.dueDate && (
                 <Badge variant="outline" className="flex items-center gap-1">
                   <Clock className="h-3 w-3" />
-                  {formatDueDate(currentTask.dueDate)}
+                  {formatDueDate(task.dueDate)}
                 </Badge>
               )}
               <Badge variant="outline" className="flex items-center gap-1">
                 <Calendar className="h-3 w-3" />
-                Created: {currentTask.createdAt.toLocaleDateString()}
+                Created: {task.createdAt.toLocaleDateString()}
               </Badge>
-              {currentTask.source && (
+              {task.source && (
                 <Badge variant="outline" className="flex items-center gap-1">
-                  {renderSourceIcon(currentTask.source)}
-                  {currentTask.source}
+                  {renderSourceIcon(task.source)}
+                  {task.source}
                 </Badge>
               )}
             </div>
           </div>
         </CardHeader>
         <CardContent>
-          <Markdown
-            content={currentTask.body || ""}
-            onSave={handleDescriptionSave}
-          />
+          <Markdown content={task.body || ""} onSave={handleDescriptionSave} />
         </CardContent>
         <CardFooter className="flex justify-between">
           <div className="text-sm text-muted-foreground">
-            Task ID: {currentTask.id}
+            Task ID: {task.id}
           </div>
           <div className="flex gap-2">
-            {currentTask.status === TaskStatus.BACKLOG && (
+            {task.status === TaskStatus.BACKLOG && (
               <Button variant="default">Move to Active</Button>
             )}
-            {currentTask.status === TaskStatus.ACTIVE && (
+            {task.status === TaskStatus.ACTIVE && (
               <Button variant="default">Mark as Done</Button>
             )}
-            {(currentTask.status === TaskStatus.BACKLOG ||
-              currentTask.status === TaskStatus.ACTIVE) && (
+            {(task.status === TaskStatus.BACKLOG ||
+              task.status === TaskStatus.ACTIVE) && (
               <Button variant="outline">Cancel Task</Button>
             )}
           </div>
@@ -160,7 +168,7 @@ export function TaskDetail({ task }: TaskDetailProps) {
             console.log("Update task:", data);
           }}
           onClose={() => setIsEditModalOpen(false)}
-          defaultValues={currentTask}
+          defaultValues={task}
         />
       )}
     </div>

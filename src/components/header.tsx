@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { ModeToggle } from "@/components/mode-toggle";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -16,7 +16,6 @@ import { createSupabaseClient } from "@/lib/prisma/server";
 import NavLink from "./nav-link";
 import { signOutAction } from "@/lib/auth/actions";
 import { SettingsModalTrigger } from "./settings-modal-trigger";
-import { getProfile } from "@/lib/profile/services/queries";
 
 export default async function Header() {
   const supabase = await createSupabaseClient();
@@ -24,8 +23,6 @@ export default async function Header() {
   const {
     data: { user },
   } = await supabase.auth.getUser();
-
-  const userProfile = await getProfile();
 
   // Get user initials for avatar
   const getUserInitials = () => {
@@ -62,10 +59,6 @@ export default async function Header() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-8 w-8 rounded-full">
                 <Avatar className="h-8 w-8">
-                  <AvatarImage
-                    src="/placeholder.svg?height=32&width=32"
-                    alt="User"
-                  />
                   <AvatarFallback>{getUserInitials()}</AvatarFallback>
                 </Avatar>
               </Button>
@@ -79,7 +72,7 @@ export default async function Header() {
                   </p>
                 </div>
               </DropdownMenuLabel>
-              <SettingsModalTrigger userProfile={userProfile} />
+              <SettingsModalTrigger />
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOutAction}>
                 <LogOut className="mr-2 h-4 w-4" />

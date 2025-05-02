@@ -1,20 +1,44 @@
 export const fetchCache = "default-cache";
-export const revalidate = 30;
+export const revalidate = 0;
 
 import { Suspense } from "react";
-import { TaskList } from "@/components/task-list";
-import { getTasksByStatus } from "@/lib/tasks/services/queries";
+import { getTasksByStatus } from "@/lib/tasks/services";
 import { CreateTaskButton } from "@/components/create-task-button";
 import { TaskListSkeleton } from "@/components/skeletons/task-list-skeleton";
 import { TaskStatus } from "@/lib/tasks/enums";
-// Async component to fetch and render backlog tasks
-async function BacklogTasksList() {
-  const backlogTasks = await getTasksByStatus([TaskStatus.BACKLOG]);
-  return <TaskList tasks={backlogTasks} />;
+import {
+  dehydrate,
+  HydrationBoundary,
+  QueryClient,
+} from "@tanstack/react-query";
+import TaskListByStatus from "@/components/task-list/task-list-by-status";
+import { getProfile } from "@/lib/profile/services";
+
+// Async component shell for backlog tasks using react-query
+async function BacklogTasksShell() {
+  const qc = new QueryClient();
+
+  await qc.prefetchQuery({
+    queryKey: ["tasks", TaskStatus.BACKLOG],
+    queryFn: () => getTasksByStatus([TaskStatus.BACKLOG]),
+  });
+
+  await qc.prefetchQuery({
+    queryKey: ["profile"],
+    queryFn: getProfile,
+  });
+
+  return (
+    <HydrationBoundary state={dehydrate(qc)}>
+      <Suspense fallback={<TaskListSkeleton />}>
+        <TaskListByStatus status={TaskStatus.BACKLOG} />
+      </Suspense>
+    </HydrationBoundary>
+  );
 }
 
+// Updated BacklogPage to be async and use react-query prefetching
 export default function BacklogPage() {
-  // Note: No async here
   return (
     <div className="container py-6 space-y-6">
       <div className="flex items-center justify-between">
@@ -23,14 +47,8 @@ export default function BacklogPage() {
         </div>
         <CreateTaskButton />
       </div>
-
-      {/* Wrap the async component in Suspense */}
       <div className="space-y-6">
-        {" "}
-        {/* Added wrapper div like in active page */}
-        <Suspense fallback={<TaskListSkeleton />}>
-          <BacklogTasksList />
-        </Suspense>
+        <BacklogTasksShell />
       </div>
     </div>
   );

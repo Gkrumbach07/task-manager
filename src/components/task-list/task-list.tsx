@@ -2,7 +2,6 @@
 
 import type React from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   Clock,
   ExternalLink,
@@ -22,29 +21,27 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { getPriorityColor, formatDueDate } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
-import { updateTaskStatus } from "@/lib/tasks/services";
 import { TaskStatus } from "@/lib/tasks/enums";
 import { TaskDto } from "@/lib/tasks/schemas";
-import { useQuery } from "@tanstack/react-query";
-import { getProfile } from "@/lib/profile/services/queries";
-import { TaskModal } from "./task-modal";
+import { TaskModal } from "../task-modal";
 import { useState } from "react";
+import { updateTaskStatus } from "@/lib/tasks/services/mutations";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface TaskListProps {
   tasks: TaskDto[];
+  jiraBaseUrl?: string;
   showActions?: boolean;
 }
 
-export function TaskList({ tasks, showActions = true }: TaskListProps) {
-  const router = useRouter();
+export function TaskList({
+  tasks,
+  jiraBaseUrl,
+  showActions = true,
+}: TaskListProps) {
   const { toast } = useToast();
   const [editTask, setEditTask] = useState<TaskDto | null>(null);
-
-  const userSettings = useQuery({
-    queryKey: ["userProfile"],
-    queryFn: () => getProfile(),
-  });
-
+  const queryClient = useQueryClient();
   const handleStatusUpdate = async (
     taskId: string,
     newStatus: TaskDto["status"]
@@ -58,7 +55,10 @@ export function TaskList({ tasks, showActions = true }: TaskListProps) {
           newStatus === "Done" ? "marked as done" : `moved to ${newStatus}`
         }`,
       });
-      router.refresh();
+
+      queryClient.invalidateQueries({
+        queryKey: ["tasks"],
+      });
     } catch (error) {
       console.error("Error updating task status:", error);
       toast({
@@ -119,10 +119,10 @@ export function TaskList({ tasks, showActions = true }: TaskListProps) {
                                 variant="outline"
                                 className="flex items-center gap-1"
                               >
-                                {userSettings.isSuccess ? (
+                                {jiraBaseUrl ? (
                                   <>
                                     <a
-                                      href={`${userSettings.data?.jiraConfig.baseUrl}/browse/${task.source}`}
+                                      href={`${jiraBaseUrl}/browse/${task.source}`}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                     >

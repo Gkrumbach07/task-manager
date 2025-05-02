@@ -5,17 +5,17 @@ import { TaskStatus } from "../enums";
 import { fromPrisma, toPrismaCreateInput, toPrismaUpdateInput } from "../mappers";
 import { CreateTaskDto, TaskDto, UpdateTaskDto } from "../schemas";
 import { getUserStrict } from "@/lib/auth/actions";
-import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
 
 // Create a new task
 export const createTask = async (taskInput: CreateTaskDto): Promise<TaskDto | null> => {
-
   const user = await getUserStrict()
 
   try {
     const data = await prisma.tasks.create({
       data: toPrismaCreateInput(taskInput, user.id),
     })
+    revalidateTag(`tasks`)
     return fromPrisma(data);
   } catch (error) {
     console.error("Error creating task:", error);
@@ -32,7 +32,7 @@ export const updateTask = async (task: UpdateTaskDto): Promise<TaskDto | null> =
       where: { id: task.id, user_id: user.id },
       data: toPrismaUpdateInput(task),
     });
-    revalidatePath("/");
+    revalidateTag(`tasks`)
     return fromPrisma(data);
   } catch (error) {
     console.error("Error updating task:", error);
@@ -49,6 +49,7 @@ export const deleteTask = async (id: string): Promise<boolean> => {
     await prisma.tasks.delete({
       where: { id, user_id: user.id },
     });
+    revalidateTag(`tasks`)
     return true;
   } catch (error) {
     console.error("Error deleting task:", error);
@@ -58,5 +59,7 @@ export const deleteTask = async (id: string): Promise<boolean> => {
 
 // Update task status
 export const updateTaskStatus = async (id: string, status: TaskStatus): Promise<TaskDto | null> => {
-  return updateTask({ id, status });
+  const task = await updateTask({ id, status });
+  revalidateTag(`tasks`)
+  return task;
 };
