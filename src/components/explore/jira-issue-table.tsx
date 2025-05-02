@@ -17,7 +17,15 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { ExternalLink, Loader2, Check, Archive, Inbox } from "lucide-react";
+import {
+  ExternalLink,
+  Loader2,
+  Archive,
+  LinkIcon,
+  MailOpen,
+  Mail,
+  Plus,
+} from "lucide-react";
 import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
@@ -65,6 +73,7 @@ type JiraIssueTableProps = {
   readIssues: ReadJiraIssueDto[] | undefined;
   onIssueIgnored: (issueKey: string) => Promise<void>;
   onIssueRead: (issueKey: string, lastReadUuid: string) => Promise<void>;
+  onIssueUnread: (issueKey: string, lastReadUuid: string) => Promise<void>;
   onTaskCreated: () => void;
 };
 
@@ -74,34 +83,65 @@ export function JiraIssueTable({
   readIssues,
   onIssueIgnored,
   onIssueRead,
+  onIssueUnread,
   onTaskCreated,
 }: JiraIssueTableProps) {
   const { toast } = useToast();
 
   // --- Mutation Hooks ---
-  const { mutate: markIssueAsRead, variables: markingAsReadVars } = useMutation(
-    {
-      mutationFn: ({
-        issueKey,
-        updated,
-      }: {
-        issueKey: string;
-        updated: string;
-      }) => onIssueRead(issueKey, updated),
-      onSuccess: (_, vars) => {
-        toast({ title: `Marked ${vars.issueKey} as read.` });
-      },
-      onError: (error, vars) => {
-        toast({
-          title: `Error marking ${vars.issueKey} as read`,
-          description: error.message,
-          variant: "destructive",
-        });
-      },
-    }
-  );
+  const {
+    mutate: markIssueAsRead,
+    variables: markingAsReadVars,
+    isPending: isMarkingRead,
+  } = useMutation({
+    mutationFn: ({
+      issueKey,
+      updated,
+    }: {
+      issueKey: string;
+      updated: string;
+    }) => onIssueRead(issueKey, updated),
+    onSuccess: (_, vars) => {
+      toast({ title: `Marked ${vars.issueKey} as read.` });
+    },
+    onError: (error, vars) => {
+      toast({
+        title: `Error marking ${vars.issueKey} as read`,
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
-  const { mutate: ignoreIssue, variables: ignoringIssueVars } = useMutation({
+  const {
+    mutate: markIssueAsUnread,
+    variables: markingAsUnreadVars,
+    isPending: isMarkingUnread,
+  } = useMutation({
+    mutationFn: ({
+      issueKey,
+      updated,
+    }: {
+      issueKey: string;
+      updated: string;
+    }) => onIssueUnread(issueKey, updated),
+    onSuccess: (_, vars) => {
+      toast({ title: `Marked ${vars.issueKey} as read.` });
+    },
+    onError: (error, vars) => {
+      toast({
+        title: `Error marking ${vars.issueKey} as read`,
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const {
+    mutate: ignoreIssue,
+    variables: ignoringIssueVars,
+    isPending: isIgnoring,
+  } = useMutation({
     mutationFn: (issueKey: string) => onIssueIgnored(issueKey),
     onSuccess: (_, issueKey) => {
       toast({ title: `Archived ${issueKey}.` });
@@ -115,33 +155,33 @@ export function JiraIssueTable({
     },
   });
 
-  const { mutate: quickCreateTask, variables: quickCreatingVars } = useMutation(
-    {
-      mutationFn: (issue: JiraDto) => createTask(jiraToCreateTaskDto(issue)),
-      onSuccess: (newTask) => {
-        if (newTask) {
-          toast({
-            title: "Task Created",
-            description: `Task '${newTask.title}' added to backlog.`,
-          });
-          onTaskCreated(); // Notify parent to refetch tasks
-        } else {
-          throw new Error("Failed to create task. API returned no data.");
-        }
-      },
-      onError: (error) => {
-        console.error("Error during quick create:", error);
+  const {
+    mutate: quickCreateTask,
+    variables: quickCreatingVars,
+    isPending: isQuickCreating,
+  } = useMutation({
+    mutationFn: (issue: JiraDto) => createTask(jiraToCreateTaskDto(issue)),
+    onSuccess: (newTask) => {
+      if (newTask) {
         toast({
-          title: "Error Creating Task",
-          description:
-            error instanceof Error
-              ? error.message
-              : "An unknown error occurred.",
-          variant: "destructive",
+          title: "Task Created",
+          description: `Task '${newTask.title}' added to backlog.`,
         });
-      },
-    }
-  );
+        onTaskCreated(); // Notify parent to refetch tasks
+      } else {
+        throw new Error("Failed to create task. API returned no data.");
+      }
+    },
+    onError: (error) => {
+      console.error("Error during quick create:", error);
+      toast({
+        title: "Error Creating Task",
+        description:
+          error instanceof Error ? error.message : "An unknown error occurred.",
+        variant: "destructive",
+      });
+    },
+  });
 
   return (
     <>
@@ -149,10 +189,11 @@ export function JiraIssueTable({
         <Table>
           <TableHeader>
             <TableRow>
+              <TableHead className="w-3">Task</TableHead>
               <TableHead className="w-[100px]">Key</TableHead>
               <TableHead>Title</TableHead>
               <TableHead className="w-[120px]">Updated</TableHead>
-              <TableHead className="text-right w-[150px]">Actions</TableHead>
+              <TableHead className="text-right w-[150px]" />
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -169,20 +210,36 @@ export function JiraIssueTable({
                 (ri) => ri.issueKey === issue.key
               );
               const isUnread = !isRead;
-              const isIgnoring = ignoringIssueVars === issue.key;
-              const isMarkingRead = markingAsReadVars?.issueKey === issue.key;
-              const isQuickCreating = quickCreatingVars?.key === issue.key;
-              const isBusy = isIgnoring || isMarkingRead || isQuickCreating;
+              const isIgnoringIssue =
+                ignoringIssueVars === issue.key && isIgnoring;
+              const isMarkingReadIssue =
+                markingAsReadVars?.issueKey === issue.key && isMarkingRead;
+              const isMarkingUnreadIssue =
+                markingAsUnreadVars?.issueKey === issue.key && isMarkingUnread;
+              const isQuickCreatingIssue =
+                quickCreatingVars?.key === issue.key && isQuickCreating;
+              const isBusy =
+                isIgnoringIssue ||
+                isMarkingReadIssue ||
+                isMarkingUnreadIssue ||
+                isQuickCreatingIssue;
 
               return (
                 <TableRow
                   key={issue.key}
                   className={cn(
                     "group",
-                    isUnread && "bg-primary/5 hover:bg-primary/10",
-                    existingTask && "opacity-60"
+                    // isUnread && "bg-primary/5 hover:bg-primary/10",
+                    isRead && "opacity-60"
                   )}
                 >
+                  <TableCell className="flex items-center justify-center">
+                    {existingTask && (
+                      <Link href={`/task/${existingTask.id}`}>
+                        <LinkIcon className="h-4 w-4" />
+                      </Link>
+                    )}
+                  </TableCell>
                   <TableCell
                     className={cn("font-medium", isUnread && "font-semibold")}
                   >
@@ -197,11 +254,8 @@ export function JiraIssueTable({
                     </a>
                   </TableCell>
                   <TableCell className="max-w-sm truncate" title={issue.title}>
-                    <span className={cn(isUnread && "font-semibold")}>
-                      {issue.title}
-                    </span>
                     {issue.fromJqlQuery && issue.fromJqlQuery.length > 0 && (
-                      <span className="ml-2 space-x-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                      <span className="ml-2 space-x-1">
                         {issue.fromJqlQuery.length === 1 ? (
                           <Badge
                             variant="outline"
@@ -221,7 +275,7 @@ export function JiraIssueTable({
                                   variant="secondary"
                                   className="px-1.5 py-0 text-xs h-5"
                                 >
-                                  {issue.fromJqlQuery.length} sources
+                                  {issue.fromJqlQuery.length} queries
                                 </Badge>
                               </TooltipTrigger>
                               <TooltipContent side="top">
@@ -232,6 +286,9 @@ export function JiraIssueTable({
                             </Tooltip>
                           </TooltipProvider>
                         )}
+                        <span className={cn(isUnread && "font-semibold")}>
+                          {issue.title}
+                        </span>
                       </span>
                     )}
                   </TableCell>
@@ -249,88 +306,101 @@ export function JiraIssueTable({
                         isBusy && "opacity-100"
                       )}
                     >
-                      {existingTask ? (
-                        <Button
-                          variant="link"
-                          size="sm"
-                          asChild
-                          className="h-auto p-0 text-xs"
-                        >
-                          <Link href={`/task/${existingTask.id}`}>
-                            View Task
-                          </Link>
-                        </Button>
-                      ) : (
-                        <>
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => quickCreateTask(issue)}
-                                  disabled={isBusy}
-                                >
-                                  {isQuickCreating ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Inbox className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Quick Import</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                          {isUnread && (
-                            <TooltipProvider delayDuration={300}>
-                              <Tooltip>
-                                <TooltipTrigger asChild>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-7 w-7"
-                                    onClick={() =>
-                                      markIssueAsRead({
-                                        issueKey: issue.key,
-                                        updated: issue.updated,
-                                      })
-                                    }
-                                    disabled={isBusy}
-                                  >
-                                    {isMarkingRead ? (
-                                      <Loader2 className="h-4 w-4 animate-spin" />
-                                    ) : (
-                                      <Check className="h-4 w-4" />
-                                    )}
-                                  </Button>
-                                </TooltipTrigger>
-                                <TooltipContent>Mark as read</TooltipContent>
-                              </Tooltip>
-                            </TooltipProvider>
-                          )}
-                          <TooltipProvider delayDuration={300}>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-7 w-7"
-                                  onClick={() => ignoreIssue(issue.key)}
-                                  disabled={isBusy}
-                                >
-                                  {isIgnoring ? (
-                                    <Loader2 className="h-4 w-4 animate-spin" />
-                                  ) : (
-                                    <Archive className="h-4 w-4" />
-                                  )}
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent>Archive</TooltipContent>
-                            </Tooltip>
-                          </TooltipProvider>
-                        </>
+                      {!existingTask && (
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() => quickCreateTask(issue)}
+                                disabled={isBusy}
+                              >
+                                {isQuickCreating ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Plus className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Quick Import</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
                       )}
+                      {isUnread ? (
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  markIssueAsRead({
+                                    issueKey: issue.key,
+                                    updated: issue.updated,
+                                  })
+                                }
+                                disabled={isBusy}
+                              >
+                                {isMarkingRead ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <MailOpen className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Mark as read</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      ) : (
+                        <TooltipProvider delayDuration={300}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                onClick={() =>
+                                  markIssueAsUnread({
+                                    issueKey: issue.key,
+                                    updated: issue.updated,
+                                  })
+                                }
+                                disabled={isBusy}
+                              >
+                                {isMarkingUnread ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Mail className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Mark as unread</TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                      )}
+                      <TooltipProvider delayDuration={300}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                              onClick={() => ignoreIssue(issue.key)}
+                              disabled={isBusy}
+                            >
+                              {isIgnoring ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                <Archive className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>Archive</TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     </div>
                   </TableCell>
                 </TableRow>

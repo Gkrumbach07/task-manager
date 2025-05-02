@@ -9,17 +9,18 @@ import { TaskDto } from "@/lib/tasks/schemas";
 import { getTasksBySources } from "@/lib/tasks/services";
 import { hideJiraIssue } from "@/lib/hidden-jiras-issues/services/mutations";
 import { getHiddenJiraIssues } from "@/lib/hidden-jiras-issues/services/queries";
-
 import { useJiraQueries } from "@/hooks/use-jira-queries";
 import { Badge } from "../ui/badge";
-import { Toggle } from "../ui/toggle";
-import { markJiraIssueAsRead } from "@/lib/read-jiras-issues/services/mutations";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  markJiraIssueAsRead,
+  unmarkJiraIssueAsRead,
+} from "@/lib/read-jiras-issues/services/mutations";
 import { getReadJiraIssues } from "@/lib/read-jiras-issues/services/queries";
 
 export function JiraExplorer() {
   const queryClient = useQueryClient();
-  const [showLinkedIssues, setShowLinkedIssues] = useState(false);
-  const [showReadIssues, setShowReadIssues] = useState(false);
+  const [activeTab, setActiveTab] = useState<string>("active");
   const { jiras, queries } = useJiraQueries();
 
   const { data: hiddenJiraIssues } = useQuery({
@@ -55,15 +56,14 @@ export function JiraExplorer() {
         }
       });
 
-      // Ensure all keys from jiraIssues are present in the map
       const finalMap = new Map<string, TaskDto | null>();
       allSelectedSourceKeys.forEach((key) => {
         finalMap.set(key, taskSourceMapHelper.get(key) ?? null);
       });
       return finalMap;
     },
-    enabled: allSelectedSourceKeys.length > 0, // Only run query if there are keys
-    initialData: new Map<string, TaskDto | null>(), // Provide initial empty map
+    enabled: allSelectedSourceKeys.length > 0,
+    initialData: new Map<string, TaskDto | null>(),
   });
 
   const handleIssueIgnored = async (issueKey: string) => {
@@ -76,6 +76,11 @@ export function JiraExplorer() {
     queryClient.invalidateQueries({ queryKey: ["readJiraIssues"] });
   };
 
+  const handleIssueUnread = async (issueKey: string) => {
+    await unmarkJiraIssueAsRead(issueKey);
+    queryClient.invalidateQueries({ queryKey: ["readJiraIssues"] });
+  };
+
   const handleTaskCreated = () => {
     queryClient.invalidateQueries({ queryKey: ["tasksBySource"] });
   };
@@ -83,61 +88,59 @@ export function JiraExplorer() {
   const visibleJiraIssues = useMemo(() => {
     const currentTaskMap = sourceToExistingTaskMap ?? new Map();
     const currentReadIssues = readJiraIssues ?? [];
+    const readIssueKeys = new Set(currentReadIssues.map((ri) => ri.issueKey));
 
     const isLoadingQueries = queries.some((q) => q.isExecuting);
     if (isLoadingQueries && jiras.length === 0) {
       return [];
     }
 
-    return jiras
-      .filter(
-        (issue) =>
-          !hiddenJiraIssueKeys.has(issue.key) &&
-          (showLinkedIssues || !currentTaskMap.get(issue.key)) &&
-          (showReadIssues ||
-            !currentReadIssues.some(
-              (readIssue) => readIssue.issueKey === issue.key
-            ))
-      )
-      .sort(
-        (a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime()
-      );
+    let filtered = jiras.filter((issue) => !hiddenJiraIssueKeys.has(issue.key));
+
+    switch (activeTab) {
+      case "unread":
+        filtered = filtered.filter((issue) => !readIssueKeys.has(issue.key));
+        break;
+      case "tasks":
+        filtered = filtered.filter((issue) => !!currentTaskMap.get(issue.key));
+        break;
+      default:
+        break;
+    }
+
+    return filtered.sort(
+      (a, b) => new Date(b.updated).getTime() - new Date(a.updated).getTime()
+    );
   }, [
     jiras,
     hiddenJiraIssueKeys,
-    showLinkedIssues,
     sourceToExistingTaskMap,
-    showReadIssues,
     readJiraIssues,
     queries,
+    activeTab,
   ]);
 
-  const totalJirasBadgeText = useMemo(() => {
-    const totalLinkedJiras = [
-      ...(sourceToExistingTaskMap?.values() ?? []),
-    ].filter((task) => task !== null).length;
-    const isLinkedJiras = totalLinkedJiras > 0;
+  const counts = useMemo(() => {
+    const currentTaskMap = sourceToExistingTaskMap ?? new Map();
+    const readIssueKeys = new Set(
+      (readJiraIssues ?? []).map((ri) => ri.issueKey)
+    );
+    const baseVisible = jiras.filter(
+      (issue) => !hiddenJiraIssueKeys.has(issue.key)
+    );
 
-    const totalIgnoredFetched = jiras.filter((issue) =>
-      hiddenJiraIssueKeys.has(issue.key)
-    ).length;
-    const isIgnoredJiras = totalIgnoredFetched > 0;
-
-    let otherText = [
-      isLinkedJiras && `${totalLinkedJiras} linked `,
-      isIgnoredJiras && `${totalIgnoredFetched} ignored`,
-    ]
-      .filter(Boolean)
-      .join(", ");
-    otherText = otherText ? `(${otherText})` : "";
-
-    return `${visibleJiraIssues.length} visible ${otherText}`;
-  }, [
-    visibleJiraIssues.length,
-    jiras,
-    hiddenJiraIssueKeys,
-    sourceToExistingTaskMap,
-  ]);
+    return {
+      active: baseVisible.filter(
+        (issue) =>
+          !currentTaskMap.get(issue.key) && !readIssueKeys.has(issue.key)
+      ).length,
+      unread: baseVisible.filter((issue) => !readIssueKeys.has(issue.key))
+        .length,
+      linked: baseVisible.filter((issue) => !!currentTaskMap.get(issue.key))
+        .length,
+      all: baseVisible.length,
+    };
+  }, [jiras, hiddenJiraIssueKeys, sourceToExistingTaskMap, readJiraIssues]);
 
   const isLoading = queries.some((q) => q.isExecuting);
 
@@ -145,51 +148,48 @@ export function JiraExplorer() {
     <div className="flex flex-col gap-4">
       <JiraQuerySection />
       <div className="space-y-3">
-        <div className="flex items-center gap-2 justify-between">
-          <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">Jira Issues</h3>
-            <Badge variant="outline">
-              <span className="text-sm font-normal px-2 py-0.5 rounded">
-                {isLoading && visibleJiraIssues.length === 0
-                  ? "Loading..."
-                  : totalJirasBadgeText}
-              </span>
-            </Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            <Toggle
-              pressed={showLinkedIssues}
-              onPressedChange={setShowLinkedIssues}
-              size="sm"
-            >
-              Show Linked
-            </Toggle>
-            <Toggle
-              pressed={showReadIssues}
-              onPressedChange={setShowReadIssues}
-              size="sm"
-            >
-              Show Read
-            </Toggle>
-          </div>
-        </div>
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className=" mb-2">
+            <TabsTrigger value="all">
+              All{" "}
+              <Badge variant="secondary" className="">
+                {counts.all}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="unread">
+              Unread{" "}
+              <Badge variant="secondary" className="">
+                {counts.unread}
+              </Badge>
+            </TabsTrigger>
+            <TabsTrigger value="tasks">
+              Tasks{" "}
+              <Badge variant="secondary" className="">
+                {counts.linked}
+              </Badge>
+            </TabsTrigger>
+          </TabsList>
 
-        {isLoading && visibleJiraIssues.length === 0 ? (
-          <div className="rounded-md border p-4">
-            <Skeleton className="h-10 w-full mb-2" />
-            <Skeleton className="h-10 w-full mb-2" />
-            <Skeleton className="h-10 w-full" />
-          </div>
-        ) : (
-          <JiraIssueTable
-            issues={visibleJiraIssues}
-            existingTasksMap={sourceToExistingTaskMap ?? new Map()}
-            readIssues={readJiraIssues ?? undefined}
-            onIssueIgnored={handleIssueIgnored}
-            onIssueRead={handleIssueRead}
-            onTaskCreated={handleTaskCreated}
-          />
-        )}
+          <TabsContent value={activeTab}>
+            {isLoading && visibleJiraIssues.length === 0 ? (
+              <div className="rounded-md border p-4">
+                <Skeleton className="h-10 w-full mb-2" />
+                <Skeleton className="h-10 w-full mb-2" />
+                <Skeleton className="h-10 w-full" />
+              </div>
+            ) : (
+              <JiraIssueTable
+                issues={visibleJiraIssues}
+                existingTasksMap={sourceToExistingTaskMap ?? new Map()}
+                readIssues={readJiraIssues ?? undefined}
+                onIssueIgnored={handleIssueIgnored}
+                onIssueRead={handleIssueRead}
+                onIssueUnread={handleIssueUnread}
+                onTaskCreated={handleTaskCreated}
+              />
+            )}
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
