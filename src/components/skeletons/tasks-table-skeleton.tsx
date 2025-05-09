@@ -8,7 +8,7 @@ import {
   TableCell,
 } from "@/components/ui/table";
 
-export function ArchivedTasksTableSkeleton() {
+export function TasksTableSkeleton() {
   // Determine number of columns based on ArchivedTasksTable (assuming 4: Title, Status, Priority, Due Date)
   const columnCount = 4;
   const rowCount = 5; // Display 5 skeleton rows

@@ -41,9 +41,8 @@ export default async function Header() {
         </div>
         <div className="flex flex-1 items-center space-x-2">
           <nav className="flex items-center space-x-4 lg:space-x-6">
-            <NavLink href="/active">Active</NavLink>
-            <NavLink href="/backlog">Backlog</NavLink>
-            <NavLink href="/archive">Archive</NavLink>
+            <NavLink href="/planner">Planner</NavLink>
+            <NavLink href="/tasks">Tasks</NavLink>
             <NavLink href="/explore">Explore</NavLink>
           </nav>
         </div>

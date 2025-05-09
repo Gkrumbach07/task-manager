@@ -21,7 +21,6 @@ export function SettingsModalTrigger() {
       <DropdownMenuItem
         onClick={() => setOpen(true)}
         onSelect={(e) => e.preventDefault()}
-        className="cursor-pointer"
       >
         <Settings className="mr-2 h-4 w-4" />
         <span>Settings</span>

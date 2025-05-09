@@ -10,7 +10,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { TaskModal } from "@/components/task-modal";
+import { TaskModal } from "@/components/tasks/task-modal";
 import {
   ArrowLeft,
   Calendar,
@@ -19,7 +19,6 @@ import {
   ExternalLink,
   Github,
 } from "lucide-react";
-import { Markdown } from "@/components/markdown";
 import { useToast } from "@/hooks/use-toast";
 import { getPriorityColor, getStatusColor, formatDueDate } from "@/lib/utils";
 import { useRouter } from "next/navigation";
@@ -93,7 +92,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
             onClick={() => {
               router.back();
             }}
-            className="flex items-center gap-2 cursor-pointer"
+            className="flex items-center gap-2"
             href="#"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -140,9 +139,7 @@ export function TaskDetail({ taskId }: TaskDetailProps) {
             </div>
           </div>
         </CardHeader>
-        <CardContent>
-          <Markdown content={task.body || ""} onSave={handleDescriptionSave} />
-        </CardContent>
+        <CardContent>{task.body}</CardContent>
         <CardFooter className="flex justify-between">
           <div className="text-sm text-muted-foreground">
             Task ID: {task.id}

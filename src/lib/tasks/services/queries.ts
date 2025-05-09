@@ -12,6 +12,20 @@ export const getRawTasks = async (userId: string): Promise<TaskDto[]> => {
   return rows.map(fromPrisma)
 }
 
+export const searchRawTasks = async (query: string, userId: string, limit: number): Promise<TaskDto[]> => {
+  const rows = await prisma.tasks.findMany({
+    where: {
+      OR: [
+        { title: { contains: query, mode: 'insensitive' } },
+        { source: { contains: query, mode: 'insensitive' } },
+      ],
+      user_id: userId,
+    },
+    take: limit,
+  })
+  return rows.map(fromPrisma)
+}
+
 export const getRawTasksBySources = async (
   sources: string[],
   userId: string

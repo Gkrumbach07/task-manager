@@ -9,7 +9,7 @@ export default async function Home() {
   } = await supabase.auth.getUser();
 
   if (!!user) {
-    return redirect("/active");
+    return redirect("/tasks");
   }
   // Show loading state while checking auth
   return (

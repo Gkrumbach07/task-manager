@@ -17,8 +17,7 @@ export function toPrismaCreateInput(dto: CreateTaskDto, userId: string): Prisma.
     status:         dto.status,
     source:         dto.source,
     priority:       dto.priority,
-	user_id:		userId,
-    // created_at, updated_at are filled by Prisma defaults/context
+	  user_id:		userId,
   };
 }
 

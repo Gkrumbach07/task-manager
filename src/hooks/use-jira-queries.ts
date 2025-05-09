@@ -78,7 +78,7 @@ export const useJiraQueries = (): UseJiraQueries => {
 	  },
       enabled: false,
 	  retry: false,
-	  staleTime: 0,
+	  staleTime: Infinity,
     })),
   });
 
