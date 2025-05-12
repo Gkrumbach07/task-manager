@@ -26,65 +26,122 @@ import {
   Mail,
   Plus,
 } from "lucide-react";
-import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
 import type { JiraDto } from "@/lib/jira/schemas";
-import type { TaskDto, CreateTaskDto } from "@/lib/tasks/schemas";
 import type { ReadJiraIssueDto } from "@/lib/read-jiras-issues/schemas";
-import { JiraPriority } from "@/lib/jira/enums";
-import { TaskPriority, TaskStatus } from "@/lib/tasks/enums";
-import { createTask } from "@/lib/tasks/services/mutations";
+import { CreateNotionPageDto, NotionCustomEmoji } from "@/lib/notion/schemas";
+import { createNotionPage } from "@/lib/notion/services";
 import { JiraIssueWithQuery } from "./types";
+import { JiraType } from "@/lib/jira/enums";
 
-// Helper functions (copied from jira-card.tsx, might need adjustments)
-const mapJiraPriorityToTaskPriority = (
-  jiraPriority: JiraPriority
-): TaskPriority => {
-  switch (jiraPriority) {
-    case JiraPriority.BLOCKER:
-    case JiraPriority.CRITICAL:
-      return TaskPriority.CRITICAL;
-    case JiraPriority.MAJOR:
-      return TaskPriority.MAJOR;
-    case JiraPriority.MINOR:
-      return TaskPriority.MINOR;
-    case JiraPriority.NORMAL:
-    default:
-      return TaskPriority.NORMAL;
+const mapJiraIssueTypeToNotionCustomEmoji = (
+  issueType: JiraType
+): NotionCustomEmoji => {
+  switch (issueType) {
+    case JiraType.TASK:
+      return NotionCustomEmoji.JiraTask;
+    case JiraType.SUB_TASK:
+      return NotionCustomEmoji.JiraSubtask;
+    case JiraType.BUG:
+      return NotionCustomEmoji.JiraBug;
+    case JiraType.STORY:
+      return NotionCustomEmoji.JiraStory;
+    case JiraType.EPIC:
+      return NotionCustomEmoji.JiraEpic;
   }
 };
 
-const jiraToCreateTaskDto = (issue: JiraDto): CreateTaskDto => ({
+// Helper function to map Jira issue to CreateNotionPageDto
+const jiraToCreateNotionPageDto = (issue: JiraDto): CreateNotionPageDto => ({
   title: issue.title,
-  body: issue.description || null,
-  dueDate: null,
-  status: TaskStatus.BACKLOG,
-  source: issue.key,
-  priority: mapJiraPriorityToTaskPriority(issue.priority),
+  sourceJiraKey: issue.key,
+  type: mapJiraIssueTypeToNotionCustomEmoji(issue.type),
 });
+
+type DueDateStatus = {
+  text: string;
+  className: string;
+};
+
+const getDueDateStatus = (
+  dueDate: string | null | undefined
+): DueDateStatus => {
+  if (!dueDate) {
+    return {
+      text: "No due date",
+      className: "text-muted-foreground",
+    };
+  }
+
+  const date = new Date(dueDate);
+  const today = new Date();
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  if (date < today) {
+    const daysOverdue = Math.floor(
+      (today.getTime() - date.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    return {
+      text: `Past due ${daysOverdue} ${daysOverdue === 1 ? "day" : "days"}`,
+      className: "text-destructive",
+    };
+  }
+
+  if (date.toDateString() === today.toDateString()) {
+    return {
+      text: "Due today",
+      className: "text-yellow-500",
+    };
+  }
+
+  if (date.toDateString() === tomorrow.toDateString()) {
+    return {
+      text: "Due tomorrow",
+      className: "text-yellow-500",
+    };
+  }
+
+  const daysRemaining = Math.ceil(
+    (date.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)
+  );
+  return {
+    text: `${daysRemaining} ${daysRemaining === 1 ? "day" : "days"} remaining`,
+    className: "",
+  };
+};
+
+const getStatusBadgeVariant = (status: string) => {
+  switch (status) {
+    case "Done":
+      return "outline";
+    case "In Progress":
+      return "default";
+    default:
+      return "secondary";
+  }
+};
 
 type JiraIssueTableProps = {
   issues: JiraIssueWithQuery[];
-  existingTasksMap: Map<string, TaskDto | null>;
   readIssues: ReadJiraIssueDto[] | undefined;
   onIssueIgnored: (issueKey: string) => Promise<void>;
   onIssueRead: (issueKey: string, lastReadUuid: string) => Promise<void>;
-  onIssueUnread: (issueKey: string, lastReadUuid: string) => Promise<void>;
-  onTaskCreated: () => void;
+  onIssueUnread: (issueKey: string) => Promise<void>;
+  onNotionPageCreated: () => void;
 };
 
 export function JiraIssueTable({
   issues,
-  existingTasksMap,
   readIssues,
   onIssueIgnored,
   onIssueRead,
   onIssueUnread,
-  onTaskCreated,
+  onNotionPageCreated,
 }: JiraIssueTableProps) {
   const { toast } = useToast();
 
@@ -118,19 +175,13 @@ export function JiraIssueTable({
     variables: markingAsUnreadVars,
     isPending: isMarkingUnread,
   } = useMutation({
-    mutationFn: ({
-      issueKey,
-      updated,
-    }: {
-      issueKey: string;
-      updated: string;
-    }) => onIssueUnread(issueKey, updated),
+    mutationFn: ({ issueKey }: { issueKey: string }) => onIssueUnread(issueKey),
     onSuccess: (_, vars) => {
-      toast({ title: `Marked ${vars.issueKey} as read.` });
+      toast({ title: `Marked ${vars.issueKey} as unread.` });
     },
     onError: (error, vars) => {
       toast({
-        title: `Error marking ${vars.issueKey} as read`,
+        title: `Error marking ${vars.issueKey} as unread`,
         description: error.message,
         variant: "destructive",
       });
@@ -156,28 +207,25 @@ export function JiraIssueTable({
   });
 
   const {
-    mutate: quickCreateTask,
-    variables: quickCreatingVars,
-    isPending: isQuickCreating,
+    mutate: quickCreateNotionPage,
+    variables: quickCreatingNotionVars,
+    isPending: isQuickCreatingNotion,
   } = useMutation({
-    mutationFn: (issue: JiraDto) => createTask(jiraToCreateTaskDto(issue)),
-    onSuccess: (newTask) => {
-      if (newTask) {
-        toast({
-          title: "Task Created",
-          description: `Task '${newTask.title}' added to backlog.`,
-        });
-        onTaskCreated(); // Notify parent to refetch tasks
-      } else {
-        throw new Error("Failed to create task. API returned no data.");
-      }
-    },
-    onError: (error) => {
-      console.error("Error during quick create:", error);
+    mutationFn: (issue: JiraDto) =>
+      createNotionPage(jiraToCreateNotionPageDto(issue)),
+    onSuccess: () => {
       toast({
-        title: "Error Creating Task",
-        description:
-          error instanceof Error ? error.message : "An unknown error occurred.",
+        title: "Notion Page Created",
+      });
+      onNotionPageCreated();
+    },
+    onError: (error, issue) => {
+      console.error("Error during Notion page quick create:", error);
+      toast({
+        title: "Error Creating Notion Page",
+        description: `For Jira issue ${issue.key}: ${
+          error instanceof Error ? error.message : "An unknown error occurred."
+        }`,
         variant: "destructive",
       });
     },
@@ -189,7 +237,7 @@ export function JiraIssueTable({
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead className="w-3">Task</TableHead>
+              <TableHead className="w-3">Notion</TableHead>
               <TableHead className="w-[100px]">Key</TableHead>
               <TableHead>Title</TableHead>
               <TableHead className="w-[120px]">Updated</TableHead>
@@ -205,7 +253,7 @@ export function JiraIssueTable({
               </TableRow>
             )}
             {issues.map((issue) => {
-              const existingTask = existingTasksMap.get(issue.key);
+              const existingNotionPage = issue.notionPage;
               const isRead = readIssues?.some(
                 (ri) => ri.issueKey === issue.key
               );
@@ -217,7 +265,8 @@ export function JiraIssueTable({
               const isMarkingUnreadIssue =
                 markingAsUnreadVars?.issueKey === issue.key && isMarkingUnread;
               const isQuickCreatingIssue =
-                quickCreatingVars?.key === issue.key && isQuickCreating;
+                quickCreatingNotionVars?.key === issue.key &&
+                isQuickCreatingNotion;
               const isBusy =
                 isIgnoringIssue ||
                 isMarkingReadIssue ||
@@ -234,10 +283,53 @@ export function JiraIssueTable({
                   )}
                 >
                   <TableCell className="flex items-center justify-center">
-                    {existingTask && (
-                      <Link href={`/task/${existingTask.id}`}>
-                        <LinkIcon className="h-4 w-4" />
-                      </Link>
+                    {existingNotionPage && (
+                      <TooltipProvider delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button
+                              variant="link"
+                              size="icon"
+                              onClick={() =>
+                                window.open(existingNotionPage.url, "_blank")
+                              }
+                            >
+                              <LinkIcon className="h-4 w-4" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <div className="flex items-center gap-3">
+                              {existingNotionPage.status && (
+                                <Badge
+                                  variant={getStatusBadgeVariant(
+                                    existingNotionPage.status
+                                  )}
+                                  className="px-2 py-0.5"
+                                >
+                                  {existingNotionPage.status}
+                                </Badge>
+                              )}
+                              <span className="text-muted-foreground text-xs">
+                                {existingNotionPage.title.slice(0, 50)}...
+                              </span>
+                              {existingNotionPage.dueDate && (
+                                <span
+                                  className={cn(
+                                    "text-xs ml-auto",
+                                    getDueDateStatus(existingNotionPage.dueDate)
+                                      .className
+                                  )}
+                                >
+                                  {
+                                    getDueDateStatus(existingNotionPage.dueDate)
+                                      .text
+                                  }
+                                </span>
+                              )}
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
                     )}
                   </TableCell>
                   <TableCell
@@ -306,7 +398,7 @@ export function JiraIssueTable({
                         isBusy && "opacity-100"
                       )}
                     >
-                      {!existingTask && (
+                      {!existingNotionPage && (
                         <TooltipProvider delayDuration={300}>
                           <Tooltip>
                             <TooltipTrigger asChild>
@@ -314,17 +406,17 @@ export function JiraIssueTable({
                                 variant="ghost"
                                 size="icon"
                                 className="h-7 w-7"
-                                onClick={() => quickCreateTask(issue)}
+                                onClick={() => quickCreateNotionPage(issue)}
                                 disabled={isBusy}
                               >
-                                {isQuickCreating ? (
+                                {isQuickCreatingIssue ? (
                                   <Loader2 className="h-4 w-4 animate-spin" />
                                 ) : (
                                   <Plus className="h-4 w-4" />
                                 )}
                               </Button>
                             </TooltipTrigger>
-                            <TooltipContent>Quick Import</TooltipContent>
+                            <TooltipContent>Create Notion Page</TooltipContent>
                           </Tooltip>
                         </TooltipProvider>
                       )}
@@ -365,7 +457,6 @@ export function JiraIssueTable({
                                 onClick={() =>
                                   markIssueAsUnread({
                                     issueKey: issue.key,
-                                    updated: issue.updated,
                                   })
                                 }
                                 disabled={isBusy}

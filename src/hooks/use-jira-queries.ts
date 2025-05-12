@@ -21,7 +21,9 @@ import {
   UpdateJiraJqlQueryDto,
 } from "@/lib/jira-jql-queries/schemas";
 import { JiraIssueWithQuery, JiraQueryExecution } from "@/components/explore/types";
-
+import { runParallelAction } from "@/lib/utils";
+import { NotionPage } from "@/lib/notion/schemas";
+import { getNotionPages } from "@/lib/notion/services";
 export type JQLQuery = {
 	query: JiraJqlQueryDto;
 	isExecuteSuccess: boolean;
@@ -69,7 +71,7 @@ export const useJiraQueries = (): UseJiraQueries => {
     queries: queryDefs.map((b) => ({
       queryKey: ["jqlQueryJiras", b.id],
       queryFn: async () => {
-		const res = await searchIssuesByJqlAndUpdateReadJiraIssues(b.jql);
+		const res = await runParallelAction(searchIssuesByJqlAndUpdateReadJiraIssues(b.jql));
 		return {
 			queryId: b.id,
 			lastExecutedJql: b.jql,
@@ -90,10 +92,25 @@ export const useJiraQueries = (): UseJiraQueries => {
 	return map
   }, [queryDefs, jirasResult])
 
+  const notionPagesResult = useQuery<NotionPage[]>({
+    queryKey: ["notionPages"],
+	queryFn: async () => {
+		const pages = await getNotionPages();
+		return pages;
+	},
+  });
+
    // 5) Merge + dedupe all issues, attach fromJqlQuery array
    const mergedJiras = React.useMemo(() => {
     type Slot = { jira: JiraIssueWithQuery; updatedAt: number };
     const map = new Map<string, Slot>();
+
+	const jiraKeyToNotionPageMap = new Map<string, NotionPage>();
+	notionPagesResult.data?.forEach((r) => {
+		if(r.jiraIssueKey) {
+			jiraKeyToNotionPageMap.set(r.jiraIssueKey, r);
+		}
+	})
 
     jirasResult.forEach((r) => {		
       r.data?.issues.forEach((issue) => {
@@ -110,7 +127,7 @@ export const useJiraQueries = (): UseJiraQueries => {
           // newer load wins, but carry forward any previous tags
           const prevTags = existing?.jira.fromJqlQuery ?? [];
           map.set(issue.id, {
-            jira: { ...issue, fromJqlQuery: [...prevTags, query] },
+            jira: { ...issue, fromJqlQuery: [...prevTags, query], notionPage: jiraKeyToNotionPageMap.get(issue.key) },
             updatedAt: r.dataUpdatedAt,
           });
         } else {
@@ -123,7 +140,7 @@ export const useJiraQueries = (): UseJiraQueries => {
     });
 
     return Array.from(map.values()).map((v) => v.jira);
-  }, [queryDefs, jirasResult]);
+  }, [notionPagesResult, jirasResult, queryDefs]);
 
 
   // 7) Mutations for toggling & deleting

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -26,34 +26,21 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { createProfile, updateProfile } from "@/lib/profile/services/mutations";
 import type { ProfileDto } from "@/lib/profile/schemas";
-import { format } from "date-fns";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "./ui/select";
-import { calculateFirstSprintStartDate } from "@/lib/profile/utils";
 import { Switch } from "./ui/switch";
 
 // Define the schema for the form input using zod
 const formSchema = z
   .object({
-    fiscalYearStartMonth: z.number().optional(),
-    fiscalYearStartDay: z.number().optional(),
-    currentSprintNumber: z.number().optional(),
-    currentSprintStartDate: z.string().optional(), // Consider validating date format if needed
-    sprintLengthDays: z.coerce
-      .number()
-      .int("Sprint length must be an integer.")
-      .positive("Sprint length must be a positive number.")
-      .optional(),
     jiraConnectionEnabled: z.boolean(),
     jiraBaseUrl: z.string().optional(),
     jiraUserEmail: z.string().email("Invalid email address.").optional(),
     jiraApiToken: z.string().optional(),
     jiraApiTokenConfigured: z.boolean(),
+    notionConnectionEnabled: z.boolean(),
+    notionApiTokenConfigured: z.boolean(),
+    notionApiToken: z.string().optional(),
+    notionDatabaseId: z.string().optional(),
+    githubApiToken: z.string().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.jiraConnectionEnabled) {
@@ -88,33 +75,41 @@ const formSchema = z
         });
       }
     }
+
+    if (data.notionConnectionEnabled) {
+      if (!data.notionApiToken || data.notionApiToken.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "A Notion API Token must be provided if the connection is enabled.",
+          path: ["notionApiToken"],
+        });
+      }
+      if (!data.notionDatabaseId || data.notionDatabaseId.trim() === "") {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "A Notion Database ID must be provided if the connection is enabled.",
+          path: ["notionDatabaseId"],
+        });
+      }
+
+      const isNewTokenProvided =
+        data.notionApiToken && data.notionApiToken.trim() !== "";
+      const isTokenAlreadyConfigured = data.notionApiTokenConfigured;
+
+      if (!isNewTokenProvided && !isTokenAlreadyConfigured) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message:
+            "A new Notion API Token must be provided if the connection is enabled and no token is currently configured.",
+          path: ["notionApiToken"],
+        });
+      }
+    }
   });
 
 const transformFormSchema = formSchema.transform((formData) => {
-  let fiscalYearStartDate;
-  if (
-    formData.fiscalYearStartMonth != null &&
-    formData.fiscalYearStartDay != null
-  ) {
-    fiscalYearStartDate = new Date(
-      new Date().getFullYear(),
-      formData.fiscalYearStartMonth,
-      formData.fiscalYearStartDay
-    ).toISOString();
-  }
-  let firstSprintStartDate;
-  if (
-    formData.currentSprintStartDate &&
-    formData.sprintLengthDays &&
-    formData.currentSprintNumber
-  ) {
-    firstSprintStartDate = calculateFirstSprintStartDate(
-      new Date(formData.currentSprintStartDate),
-      formData.currentSprintNumber,
-      formData.sprintLengthDays
-    );
-  }
-
   let jiraConfig;
   if (formData.jiraConnectionEnabled) {
     jiraConfig = {
@@ -132,11 +127,25 @@ const transformFormSchema = formSchema.transform((formData) => {
     };
   }
 
+  let notionConfig;
+  if (formData.notionConnectionEnabled) {
+    notionConfig = {
+      apiToken: !formData.notionApiTokenConfigured
+        ? formData.notionApiToken
+        : undefined,
+      databaseId: formData.notionDatabaseId,
+    };
+  } else {
+    notionConfig = {
+      apiToken: null,
+      databaseId: null,
+    };
+  }
+
   return {
-    fiscalYearStartDate: fiscalYearStartDate,
-    firstSprintStartDate: firstSprintStartDate,
-    sprintLengthDays: formData.sprintLengthDays,
     jiraConfig,
+    notionConfig,
+    githubApiToken: formData.githubApiToken,
   };
 });
 
@@ -155,9 +164,20 @@ const transformFormDataForCreateSchema = transformFormSchema.transform(
         apiToken: formData.jiraConfig.apiToken,
       };
     }
+
+    let notionConfig;
+    if (formData.notionConfig.apiToken && formData.notionConfig.databaseId) {
+      notionConfig = {
+        apiToken: formData.notionConfig.apiToken,
+        databaseId: formData.notionConfig.databaseId,
+      };
+    }
+
     return {
       ...formData,
       jiraConfig,
+      notionConfig,
+      githubApiToken: formData.githubApiToken,
     };
   }
 );
@@ -167,55 +187,41 @@ type SettingsFormInput = z.infer<typeof formSchema>;
 
 // Define props for the modal
 type SettingsModalProps = {
+  initialData?: ProfileDto;
   onOpenChange: (open: boolean) => void;
-  initialData: ProfileDto | null;
+  open: boolean;
 };
-
-const monthNames = [
-  "January",
-  "February",
-  "March",
-  "April",
-  "May",
-  "June",
-  "July",
-  "August",
-  "September",
-  "October",
-  "November",
-  "December",
-];
 
 export function SettingsModal({
   onOpenChange,
+  open,
   initialData,
 }: SettingsModalProps) {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(false); // Add loading state
 
+  const toDefaultValues = (data?: ProfileDto): SettingsFormInput => ({
+    jiraConnectionEnabled: data?.jiraConfig?.apiTokenConfigured ?? false,
+    jiraBaseUrl: data?.jiraConfig?.baseUrl ?? "",
+    jiraUserEmail: data?.jiraConfig?.userEmail ?? "",
+    jiraApiToken: "",
+    jiraApiTokenConfigured: data?.jiraConfig?.apiTokenConfigured ?? false,
+    notionConnectionEnabled: data?.notionConfig?.apiTokenConfigured ?? false,
+    notionApiToken: "",
+    notionApiTokenConfigured: data?.notionConfig?.apiTokenConfigured ?? false,
+    notionDatabaseId: data?.notionConfig?.databaseId ?? "",
+  });
+
   const form = useForm<SettingsFormInput>({
     resolver: zodResolver(formSchema),
-    defaultValues: {
-      fiscalYearStartMonth: initialData?.timeConfig?.fiscalYearStartDate
-        ? new Date(initialData.timeConfig.fiscalYearStartDate).getUTCMonth()
-        : undefined,
-      fiscalYearStartDay: initialData?.timeConfig?.fiscalYearStartDate
-        ? new Date(initialData.timeConfig.fiscalYearStartDate).getUTCDate()
-        : undefined,
-      currentSprintNumber: initialData?.timeConfig?.currentSprint || 1,
-      currentSprintStartDate: initialData?.timeConfig?.currentSprintStartDate
-        ? format(initialData.timeConfig.currentSprintStartDate, "yyyy-MM-dd")
-        : undefined,
-      sprintLengthDays: initialData?.timeConfig?.sprintLengthDays ?? 14,
-      jiraConnectionEnabled:
-        initialData?.jiraConfig?.apiTokenConfigured ?? false,
-      jiraBaseUrl: initialData?.jiraConfig?.baseUrl ?? "",
-      jiraUserEmail: initialData?.jiraConfig?.userEmail ?? "",
-      jiraApiToken: "",
-      jiraApiTokenConfigured:
-        initialData?.jiraConfig?.apiTokenConfigured ?? false,
-    },
+    defaultValues: toDefaultValues(initialData),
   });
+
+  useEffect(() => {
+    if (initialData) {
+      form.reset(toDefaultValues(initialData));
+    }
+  }, [initialData, form]);
 
   const handleSubmit = async (values: SettingsFormInput) => {
     setIsLoading(true);
@@ -259,13 +265,23 @@ export function SettingsModal({
     }
   };
 
+  const handleOpenChange = (open: boolean) => {
+    onOpenChange(open);
+    if (!open) {
+      form.reset(toDefaultValues(initialData));
+    }
+    if (open) {
+      form.reset();
+    }
+  };
+
   return (
-    <Dialog open={true} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="sm:max-w-[480px]">
         <DialogHeader>
           <DialogTitle>Settings</DialogTitle>
           <DialogDescription>
-            Adjust your sprint and fiscal year settings here.
+            Manage your account settings and preferences.
           </DialogDescription>
         </DialogHeader>
         <Form {...form}>
@@ -273,159 +289,6 @@ export function SettingsModal({
             onSubmit={form.handleSubmit(handleSubmit)}
             className="space-y-4"
           >
-            <div>
-              <FormLabel className="text-sm block mb-2">
-                Fiscal year start date
-              </FormLabel>
-              <div className="flex gap-2">
-                <FormField
-                  control={form.control}
-                  name="fiscalYearStartMonth"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <Select
-                        onValueChange={(value) =>
-                          field.onChange(value ? parseInt(value) : undefined)
-                        }
-                        value={
-                          field.value !== undefined
-                            ? field.value.toString()
-                            : ""
-                        }
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Month" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {monthNames.map((name, index) => (
-                            <SelectItem key={index} value={index.toString()}>
-                              {name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-                <FormField
-                  control={form.control}
-                  name="fiscalYearStartDay"
-                  render={({ field }) => (
-                    <FormItem className="flex-1">
-                      <Select
-                        onValueChange={(value) =>
-                          field.onChange(value ? parseInt(value) : undefined)
-                        }
-                        value={
-                          field.value !== undefined
-                            ? field.value.toString()
-                            : ""
-                        }
-                      >
-                        <FormControl>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select Day" />
-                          </SelectTrigger>
-                        </FormControl>
-                        <SelectContent>
-                          {Array.from({ length: 31 }, (_, i) => i + 1).map(
-                            (day) => (
-                              <SelectItem key={day} value={day.toString()}>
-                                {day}
-                              </SelectItem>
-                            )
-                          )}
-                        </SelectContent>
-                      </Select>
-                      <FormMessage />
-                    </FormItem>
-                  )}
-                />
-              </div>
-              <FormDescription className="mt-2">
-                Choose the month and day the fiscal year starts.
-              </FormDescription>
-            </div>
-
-            <FormField
-              control={form.control}
-              name="currentSprintStartDate"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Current Sprint Start Date</FormLabel>
-                  <FormControl>
-                    <Input type="date" {...field} value={field.value || ""} />
-                  </FormControl>
-                  <FormDescription>
-                    The start date of your current sprint.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-            <FormField
-              control={form.control}
-              name="sprintLengthDays"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Sprint Length (Days)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="1"
-                      step="1"
-                      {...field}
-                      value={field.value ?? ""}
-                      onChange={(e) =>
-                        field.onChange(
-                          e.target.value === ""
-                            ? undefined
-                            : parseInt(e.target.value)
-                        )
-                      }
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    How many days each sprint lasts.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="currentSprintNumber"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Current Sprint Number</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="number"
-                      min="1"
-                      step="1"
-                      {...field}
-                      value={field.value ?? ""}
-                      onChange={(e) =>
-                        field.onChange(
-                          e.target.value === ""
-                            ? undefined
-                            : parseInt(e.target.value)
-                        )
-                      }
-                    />
-                  </FormControl>
-                  <FormDescription>
-                    The number identifying the current sprint.
-                  </FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
             <FormField
               control={form.control}
               name="jiraConnectionEnabled"
@@ -517,6 +380,88 @@ export function SettingsModal({
                           {isConfigured
                             ? "API token is configured. Reset to enter a new one."
                             : "The API token for the user you want to use to connect to Jira."}
+                        </FormDescription>
+                        <FormMessage />
+                      </FormItem>
+                    );
+                  }}
+                />
+              </>
+            )}
+            <FormField
+              control={form.control}
+              name="notionConnectionEnabled"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Notion Connection</FormLabel>
+                  <FormControl>
+                    <Switch
+                      checked={field.value}
+                      onCheckedChange={field.onChange}
+                    />
+                  </FormControl>
+                </FormItem>
+              )}
+            />
+            {form.watch("notionConnectionEnabled") && (
+              <>
+                <FormField
+                  control={form.control}
+                  name="notionDatabaseId"
+                  render={({ field }) => (
+                    <FormItem>
+                      <FormLabel>Notion Database ID</FormLabel>
+                      <FormControl>
+                        <Input {...field} />
+                      </FormControl>
+                      <FormDescription>
+                        The ID of the Notion database you want to use.
+                      </FormDescription>
+                      <FormMessage />
+                    </FormItem>
+                  )}
+                />
+                <FormField
+                  control={form.control}
+                  name="notionApiToken"
+                  render={({ field }) => {
+                    const isConfigured = form.watch("notionApiTokenConfigured");
+
+                    const handleReset = () => {
+                      form.setValue("notionApiTokenConfigured", false);
+                      form.setValue("notionApiToken", ""); // Clear the actual token value
+                      field.onChange(""); // Update the field state
+                    };
+
+                    return (
+                      <FormItem>
+                        <FormLabel>Notion API Token</FormLabel>
+                        <FormControl>
+                          {isConfigured ? (
+                            <div className="flex items-center space-x-2">
+                              <Input
+                                type="password"
+                                value="********"
+                                disabled
+                                className="flex-grow"
+                                aria-label="Configured API Token"
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                onClick={handleReset}
+                              >
+                                Reset
+                              </Button>
+                            </div>
+                          ) : (
+                            <Input type="password" {...field} />
+                          )}
+                        </FormControl>
+                        <FormDescription>
+                          {isConfigured
+                            ? "API token is configured. Reset to enter a new one."
+                            : "The API token for your Notion account."}
                         </FormDescription>
                         <FormMessage />
                       </FormItem>

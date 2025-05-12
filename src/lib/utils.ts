@@ -1,7 +1,5 @@
 import { clsx, type ClassValue } from "clsx"
 import { twMerge } from "tailwind-merge"
-import { TaskPriority, TaskStatus } from "./tasks/enums"
-import { TaskDto } from "./tasks/schemas"
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs))
@@ -20,49 +18,33 @@ export const getCurrentTimeInfo = () => {
   }
 }
 
-export const formatDueDate = (dueDate: TaskDto["dueDate"] | null) => {
-  if (!dueDate) return "No due date"
-
-  switch (dueDate.type) {
-    case "date":
-      return new Date(dueDate.value).toLocaleDateString()
-    case "quarter":
-      return `Q${dueDate.value} ${new Date().getFullYear()}`
-    case "sprint":
-      return `Sprint ${dueDate.value}`
-    case "year":
-      return `${dueDate.value}`
-    default:
-      return "Unknown"
-  }
+/**
+ * Utility function to create a non-blocking server action that can be invoked with {@link runParallelAction}.
+ * Learn more at https://github.com/icflorescu/next-server-actions-parallel.
+ *
+ * @example
+ * const listUsers = createParallelAction(async () => { // 👈 don't forget the `async` keyword
+ *   return await prisma.user.findMany();
+ * });
+ *
+ * const listProducts = createParallelAction(async () => {
+ *   return await prisma.product.findMany();
+ })
+ */
+ export function createParallelAction<T, U extends unknown[]>(action: (...args: U) => Promise<T>) {
+  return async (...args: U) => [action(...args)] as const;
 }
 
-export const getPriorityColor = (priority: TaskPriority) => {
-  switch (priority) {
-    case "Minor":
-      return "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
-    case "Normal":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-    case "Major":
-      return "bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-300"
-    case "Critical":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-    default:
-      return "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-300"
-  }
-}
-
-export const getStatusColor = (status: TaskStatus) => {
-  switch (status) {
-    case "Backlog":
-      return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
-    case "Active":
-      return "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300"
-    case "Done":
-      return "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-    case "Canceled":
-      return "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300"
-    default:
-      return "bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-300"
-  }
+/**
+ * Utility function to invoke a non-blocking server action created with {@link createParallelAction}.
+ * Learn more at https://github.com/icflorescu/next-server-actions-parallel.
+ *
+ * @example
+ * await Promise.all([
+ *   runParallelAction(listUsers()),
+ *   runParallelAction(listProducts())
+ * ]);
+ */
+export async function runParallelAction<T>(result: Promise<readonly [Promise<T>]>) {
+  return (await result)[0];
 }

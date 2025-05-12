@@ -7,21 +7,20 @@ import {
   type ProfileDto,
   JiraConfigDto,
   GithubApiTokenDto,
+  NotionConfigDto,
 } from "./schemas";
-import { calculateCurrentSprint, calculateCurrentQuarter, calculateCurrentSprintStartDate } from "./utils";
 import { decrypt, encrypt } from "../auth/crypto";
 
 
 export function toPrismaCreateInput(dto: CreateProfileDto, userId: string): Prisma.profilesCreateInput {
   return {
-    fiscal_year_start_date: dto.fiscalYearStartDate,
-    first_sprint_start_date: dto.firstSprintStartDate,
-    sprint_length_days: dto.sprintLengthDays,
     user_id: userId,
     jira_base_url: dto.jiraConfig?.baseUrl,
     jira_user_email: dto.jiraConfig?.userEmail,
     jira_api_token: dto.jiraConfig?.apiToken ? encrypt(dto.jiraConfig.apiToken) : null,
     github_api_token: dto.githubApiToken ? encrypt(dto.githubApiToken) : null,
+    notion_api_token: dto.notionConfig?.apiToken ? encrypt(dto.notionConfig.apiToken) : null,
+    notion_database_id: dto.notionConfig?.databaseId,
   };
 }
 
@@ -30,40 +29,31 @@ export function toPrismaUpdateInput(dto: UpdateProfileDto): Prisma.profilesUpdat
 	id: dto.id,
   };
 
-  if (dto.fiscalYearStartDate !== undefined) data.fiscal_year_start_date = dto.fiscalYearStartDate;
-  if (dto.firstSprintStartDate !== undefined) data.first_sprint_start_date = dto.firstSprintStartDate;
-  if (dto.sprintLengthDays !== undefined) data.sprint_length_days = dto.sprintLengthDays;
   if (dto.jiraConfig?.baseUrl !== undefined) data.jira_base_url = dto.jiraConfig.baseUrl;
   if (dto.jiraConfig?.userEmail !== undefined) data.jira_user_email = dto.jiraConfig.userEmail;
   if (dto.jiraConfig?.apiToken !== undefined) data.jira_api_token = dto.jiraConfig.apiToken ? encrypt(dto.jiraConfig.apiToken) : null;
   if (dto.githubApiToken !== undefined) data.github_api_token = dto.githubApiToken ? encrypt(dto.githubApiToken) : null;
+  if (dto.notionConfig?.apiToken !== undefined) data.notion_api_token = dto.notionConfig.apiToken ? encrypt(dto.notionConfig.apiToken) : null;
+  if (dto.notionConfig?.databaseId !== undefined) data.notion_database_id = dto.notionConfig.databaseId;
 
   return data;
 }
 
 export function fromPrisma(row: PrismaProfile): ProfileDto {
-	const { fiscal_year_start_date, first_sprint_start_date, sprint_length_days } = row;
-	const currentSprint = (!first_sprint_start_date || !sprint_length_days) ? 1 : calculateCurrentSprint(first_sprint_start_date, sprint_length_days);
-	const currentSprintStartDate = (!first_sprint_start_date || !sprint_length_days) ? null : calculateCurrentSprintStartDate(first_sprint_start_date, sprint_length_days);
-	const currentQuarter = (!fiscal_year_start_date) ? 1 : calculateCurrentQuarter(fiscal_year_start_date);
 
     return {
-        id: row.id,
-        timeConfig: {
-            fiscalYearStartDate: fiscal_year_start_date?.toISOString() ?? null,
-            firstSprintStartDate: first_sprint_start_date?.toISOString() ?? null,
-            sprintLengthDays: sprint_length_days,
-            currentSprint: currentSprint,
-            currentQuarter: currentQuarter,
-            currentSprintStartDate: currentSprintStartDate?.toISOString() ?? null,
-        },
-        updatedAt: row.updated_at,
-		jiraConfig: {
-			baseUrl: row.jira_base_url,
-			userEmail: row.jira_user_email,
-			apiTokenConfigured: row.jira_api_token !== null,
-		},
-    githubApiTokenConfigured: row.github_api_token !== null,
+      id: row.id,
+      updatedAt: row.updated_at,
+      jiraConfig: {
+        baseUrl: row.jira_base_url,
+        userEmail: row.jira_user_email,
+        apiTokenConfigured: row.jira_api_token !== null,
+      },
+      githubApiToken: row.github_api_token ? decrypt(row.github_api_token) : undefined,
+      notionConfig: {
+        databaseId: row.notion_database_id,
+        apiTokenConfigured: row.notion_api_token !== null,
+      },
     };
 }
 
@@ -78,5 +68,12 @@ export function fromPrismaJiraConfig(row: PrismaProfile): JiraConfigDto {
 export function fromPrismaGithubApiToken(row: PrismaProfile): GithubApiTokenDto {
 	return {
 		token: row.github_api_token ? decrypt(row.github_api_token) : null,
+	};
+}
+
+export function fromPrismaNotionConfig(row: PrismaProfile): NotionConfigDto {
+	return {
+		token: row.notion_api_token ? decrypt(row.notion_api_token) : null,
+		databaseId: row.notion_database_id,
 	};
 }

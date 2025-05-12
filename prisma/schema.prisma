@@ -22,22 +22,8 @@ model profiles {
   jira_user_email         String?
   jira_api_token          String?
   github_api_token        String?
-}
-
-
-model tasks {
-  id             String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id        String   @db.Uuid
-  updated_at     DateTime @default(now()) @db.Timestamptz(6)
-  created_at     DateTime @default(now()) @db.Timestamptz(6)
-  title          String
-  body           Json?
-  due_date_type  String?
-  due_date_value String?
-  status         String
-  source         String? @unique
-  source_last_synced_at DateTime? @db.Timestamptz(6)
-  priority       String
+  notion_api_token        String?
+  notion_database_id      String?
 }
 
 model jira_jql_queries {
@@ -64,13 +50,4 @@ model read_jira_issues {
   last_read_uuid   String
   
   @@id([user_id, issue_key])
-}
-
-model editor_content {
-  id         String   @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
-  user_id    String   @db.Uuid
-  date       DateTime @db.Date // Specific date the content refers to
-  created_at DateTime @default(now()) @db.Timestamptz(6) // When the record was created
-  updated_at DateTime @updatedAt @db.Timestamptz(6) // When the record was last updated
-  content    Json     // To store the Tiptap JSON content
 }

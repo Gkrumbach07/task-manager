@@ -5,6 +5,7 @@ import { fromJira } from '../mappers';
 import { JiraDto } from '../schemas';
 import { getReadJiraIssues } from '@/lib/read-jiras-issues/services/queries';
 import { unmarkJiraIssuesAsRead } from '@/lib/read-jiras-issues/services/mutations';
+import { createParallelAction } from '@/lib/utils';
 
 export type JiraIssue = {
 	id: string;
@@ -100,12 +101,12 @@ export async function searchIssuesByJql(
   }
 }
 
-export async function searchIssuesByJqlAndUpdateReadJiraIssues(
+export const searchIssuesByJqlAndUpdateReadJiraIssues = createParallelAction(async (
   jql: string,
   startAt?: number,
   maxResults?: number,
   fields?: string[],
-) {
+) => {
   const issues = await searchIssuesByJql(jql, startAt, maxResults, fields);
   const lastReadIssues = await getReadJiraIssues();
   const lastReadIssuesMap = new Map(lastReadIssues?.map((issue) => [issue.issueKey, issue.lastReadUuid]));
@@ -122,4 +123,4 @@ export async function searchIssuesByJqlAndUpdateReadJiraIssues(
   await unmarkJiraIssuesAsRead(issuesToUpdate);
   
   return issues;
-}
+})
