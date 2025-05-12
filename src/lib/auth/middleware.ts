@@ -43,7 +43,7 @@ export const updateSession = async (request: NextRequest) => {
 		const { pathname } = request.nextUrl;
 
 		// Check if the current path is public
-		const isPublicPath = publicPaths.some((path) => pathname.startsWith(path)) || pathname === '/';
+		const isPublicPath = publicPaths.some((path) => pathname.startsWith(path));
 
 		// Check if the current path is an auth route like /login or /signup
 		const isAuthRoute = authRoutes.some((path) => pathname.startsWith(path));
