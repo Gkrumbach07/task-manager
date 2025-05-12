@@ -27,7 +27,7 @@ export async function getNotionPages(): Promise<NotionPage[]> {
     if (!notionClient) {
       throw new Error("Could not initialize Notion client");
     }
-
+    
     // Query Notion database for pages with the matching Jira keys
     const response = await notionClient.databases.query({
       database_id: config.databaseId,

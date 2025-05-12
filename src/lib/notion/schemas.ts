@@ -270,7 +270,6 @@ export const NotionDatabaseTaskPropertiesSchema = z.object({
 export const CreateNotionPageDtoSchema = z.object({
   title: z.string(),
   sourceJiraKey: z.string(),
-  jiraIssueKey: z.string().optional(),
   type: z.nativeEnum(NotionCustomEmoji),
 });
 
