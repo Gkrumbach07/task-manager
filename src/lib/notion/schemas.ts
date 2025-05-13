@@ -58,15 +58,6 @@ export const NotionDatabaseTaskPropertiesSchema = z.object({
       href: z.string().nullable()
     }))
   }),
-  'Priority': z.object({
-    id: z.string(),
-    type: z.enum(['select']),
-    select: z.object({
-      id: z.string(),
-      name: z.string(),
-      color: z.string()
-    }).nullable()
-  }),
   'Name': z.object({
     id: z.string(),
     type: z.enum(['title']),
@@ -107,7 +98,6 @@ export const NotionPageSchema = z.object({
   status: z.string().nullable().optional(),
   dueDate: z.string().nullable().optional(),
   labels: z.array(z.string()).optional(),
-  priority: z.string().nullable().optional(),
   jiraIssueKey: z.string().nullable().optional(),
 });
 

@@ -20,7 +20,6 @@ export function mapNotionApiResponseToNotionPage(notionApiPage: PageObjectRespon
     status: properties.Status?.status?.name,
     dueDate: properties['Due date']?.date?.start,
     labels: properties.Labels?.multi_select?.map((option) => option.name),
-    priority: properties.Priority?.select?.name,
     jiraIssueKey: properties['Jira key']?.rich_text?.map((t) => t.plain_text).join(""),
   };
 }
