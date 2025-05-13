@@ -536,51 +536,49 @@ export function JiraIssueTable({
                         getDueDateStatus(existingNotionPage?.dueDate).className
                     )}
                   >
-                    {existingNotionPage?.dueDate &&
-                      getDueDateStatus(existingNotionPage?.dueDate).text}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-7 w-7">
-                          {existingNotionPage?.dueDate ? (
-                            <Edit2 className="h-4 w-4" />
-                          ) : (
-                            <Calendar className="h-4 w-4" />
-                          )}
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent>
-                        <DropdownMenuItem
-                          disabled={
-                            !existingNotionPage?.id || isUpdatingDueDate
-                          }
-                          onSelect={() =>
-                            handleDueDateChange(issue.key, "this-sprint")
-                          }
-                        >
-                          Due this sprint
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={
-                            !existingNotionPage?.id || isUpdatingDueDate
-                          }
-                          onSelect={() =>
-                            handleDueDateChange(issue.key, "next-sprint")
-                          }
-                        >
-                          Due next sprint
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          disabled={
-                            !existingNotionPage?.id || isUpdatingDueDate
-                          }
-                          onSelect={() =>
-                            handleDueDateChange(issue.key, "next-quarter")
-                          }
-                        >
-                          Due next quarter
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {existingNotionPage && (
+                      <>
+                        {existingNotionPage?.dueDate &&
+                          getDueDateStatus(existingNotionPage?.dueDate).text}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7"
+                            >
+                              {existingNotionPage?.dueDate ? (
+                                <Edit2 className="h-4 w-4" />
+                              ) : (
+                                <Calendar className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent>
+                            <DropdownMenuItem
+                              disabled={
+                                !existingNotionPage?.id || isUpdatingDueDate
+                              }
+                              onSelect={() =>
+                                handleDueDateChange(issue.key, "this-sprint")
+                              }
+                            >
+                              Due this sprint
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              disabled={
+                                !existingNotionPage?.id || isUpdatingDueDate
+                              }
+                              onSelect={() =>
+                                handleDueDateChange(issue.key, "next-sprint")
+                              }
+                            >
+                              Due next sprint
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </>
+                    )}
                   </TableCell>
                   <TableCell className="text-right">
                     <div
