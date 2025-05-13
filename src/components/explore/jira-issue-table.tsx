@@ -69,6 +69,8 @@ const mapJiraIssueTypeToNotionCustomEmoji = (
       return NotionCustomEmoji.JiraStory;
     case JiraType.EPIC:
       return NotionCustomEmoji.JiraEpic;
+    case JiraType.FEATURE:
+      return NotionCustomEmoji.JiraEpic;
   }
 };
 

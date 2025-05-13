@@ -22,5 +22,6 @@ export enum JiraType {
   SUB_TASK = "Sub-task",
   STORY = "Story",
   EPIC = "Epic",
+  FEATURE = "Feature",
 }
 

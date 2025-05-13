@@ -47,12 +47,12 @@ export function mapCreateDtoToNotionApiRequest(
 
   return {
     parent: { database_id: databaseId },
-      icon: {
+      icon: dto.type ? {
         type: "custom_emoji",
         custom_emoji: {
           id: dto.type,
         },
-      },
+      } : undefined,
     properties,
   };
 } 
