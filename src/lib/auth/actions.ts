@@ -9,7 +9,7 @@ export const signUpAction = async (formData: FormData) => {
 	const email = formData.get("email")?.toString();
 	const password = formData.get("password")?.toString();
 	const supabase = await createSupabaseClient();
-	const origin = (await headers()).get("origin");
+	const origin = process.env.NEXT_PUBLIC_APP_URL
 
 
 	if (!email || !password) {

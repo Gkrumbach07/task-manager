@@ -25,8 +25,19 @@ import {
   MailOpen,
   Mail,
   Plus,
+  Calendar,
+  Edit2,
 } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import {
+  formatDistanceToNow,
+  addDays,
+  format,
+  getDay,
+  isLeapYear,
+  startOfToday,
+  getYear,
+  getMonth,
+} from "date-fns";
 import { useMutation } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
@@ -37,6 +48,12 @@ import { CreateNotionPageDto, NotionCustomEmoji } from "@/lib/notion/schemas";
 import { createNotionPage } from "@/lib/notion/services";
 import { JiraIssueWithQuery } from "./types";
 import { JiraType } from "@/lib/jira/enums";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
 
 const mapJiraIssueTypeToNotionCustomEmoji = (
   issueType: JiraType
@@ -126,12 +143,81 @@ const getStatusBadgeVariant = (status: string) => {
   }
 };
 
+// Format for dates passed to Notion/APIs
+const DATE_FORMAT = "yyyy-MM-dd";
+
+// Helper to find the end of the current 3-week sprint
+// Based on the current sprint which started April 28, 2025
+const calculateEndOfCurrentSprint = (): string => {
+  const today = startOfToday();
+  const sprintStart = new Date("2025-04-28");
+
+  // Calculate weeks since sprint start
+  const weeksSinceStart = Math.floor(
+    (today.getTime() - sprintStart.getTime()) / (1000 * 60 * 60 * 24 * 7)
+  );
+
+  // Calculate which week of the current sprint we're in (0-2)
+  const currentSprintWeek = weeksSinceStart % 3;
+
+  // Calculate days until next Friday
+  const currentDay = getDay(today);
+  const daysUntilFriday = (5 - currentDay + 7) % 7;
+
+  // If we're in the last week of the sprint, use this Friday
+  // Otherwise, use the Friday after next
+  const targetFriday = addDays(
+    today,
+    currentSprintWeek === 2 ? daysUntilFriday : daysUntilFriday + 7
+  );
+
+  return format(targetFriday, DATE_FORMAT);
+};
+
+// Helper to find the end of the next 3-week sprint
+const calculateEndOfNextSprint = (): string => {
+  const endOfCurrent = calculateEndOfCurrentSprint();
+  // Parse the date string correctly before adding days
+  const endOfCurrentDate = new Date(`${endOfCurrent}T00:00:00`); // Avoid timezone issues
+  const nextSprintEnd = addDays(endOfCurrentDate, 21); // Add 21 days (3 weeks) to get the end of next sprint
+  return format(nextSprintEnd, DATE_FORMAT);
+};
+
+// Helper to find the end date of the next quarter based on Notion logic
+const calculateEndOfNextQuarter = (): string => {
+  const today = startOfToday();
+  const year = getYear(today);
+  const month = getMonth(today); // 0-indexed (0 = Jan, 11 = Dec)
+
+  // Fiscal Quarter ends: Feb 28/29 (Q4), May 31 (Q1), Aug 31 (Q2), Nov 30 (Q3)
+  if (month <= 1) {
+    // Current: Q4 (Jan, Feb) -> Target Q4 End: Feb 28/29
+    const febDays = isLeapYear(year) ? 29 : 28;
+    return `${year}-02-${febDays}`;
+  } else if (month <= 4) {
+    // Current: Q1 (Mar, Apr, May) -> Target Q1 End: May 31
+    return `${year}-05-31`;
+  } else if (month <= 7) {
+    // Current: Q2 (Jun, Jul, Aug) -> Target Q2 End: Aug 31
+    return `${year}-08-31`;
+  } else if (month <= 10) {
+    // Current: Q3 (Sep, Oct, Nov) -> Target Q3 End: Nov 30
+    return `${year}-11-30`;
+  } else {
+    // Current: Q4 (Dec) -> Target Q4 End: Feb 28/29 of *next* year
+    const nextYear = year + 1;
+    const febDays = isLeapYear(nextYear) ? 29 : 28;
+    return `${nextYear}-02-${febDays}`;
+  }
+};
+
 type JiraIssueTableProps = {
   issues: JiraIssueWithQuery[];
   readIssues: ReadJiraIssueDto[] | undefined;
   onIssueIgnored: (issueKey: string) => Promise<void>;
   onIssueRead: (issueKey: string, lastReadUuid: string) => Promise<void>;
   onIssueUnread: (issueKey: string) => Promise<void>;
+  onUpdateNotionPageDueDate: (pageId: string, dueDate: string) => Promise<void>;
   onNotionPageCreated: () => void;
 };
 
@@ -141,6 +227,7 @@ export function JiraIssueTable({
   onIssueIgnored,
   onIssueRead,
   onIssueUnread,
+  onUpdateNotionPageDueDate,
   onNotionPageCreated,
 }: JiraIssueTableProps) {
   const { toast } = useToast();
@@ -231,6 +318,55 @@ export function JiraIssueTable({
     },
   });
 
+  const { mutate: updateDueDate, isPending: isUpdatingDueDate } = useMutation({
+    mutationFn: ({ pageId, dueDate }: { pageId: string; dueDate: string }) =>
+      onUpdateNotionPageDueDate(pageId, dueDate),
+    onSuccess: () => {
+      toast({ title: `Due date updated for Notion page.` });
+      // Optionally refetch or update local state if needed
+    },
+    onError: (error, vars) => {
+      toast({
+        title: `Error updating due date for Notion page ${vars.pageId}`,
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+
+  const handleDueDateChange = (issueKey: string, type: string) => {
+    const issue = issues.find((i) => i.key === issueKey);
+    if (!issue?.notionPage?.id) {
+      toast({
+        title: "Cannot update due date",
+        description: "No linked Notion page found for this issue.",
+        variant: null,
+      });
+      return;
+    }
+
+    let newDueDate: string;
+    switch (type) {
+      case "this-sprint":
+        newDueDate = calculateEndOfCurrentSprint();
+        break;
+      case "next-sprint":
+        newDueDate = calculateEndOfNextSprint();
+        break;
+      case "next-quarter":
+        newDueDate = calculateEndOfNextQuarter();
+        break;
+      default:
+        toast({
+          title: "Invalid due date type",
+          variant: null,
+        });
+        return;
+    }
+
+    updateDueDate({ pageId: issue.notionPage.id, dueDate: newDueDate });
+  };
+
   return (
     <>
       <div className="rounded-md border">
@@ -241,6 +377,7 @@ export function JiraIssueTable({
               <TableHead className="w-[100px]">Key</TableHead>
               <TableHead>Title</TableHead>
               <TableHead className="w-[120px]">Updated</TableHead>
+              <TableHead className="w-[120px]">Due date</TableHead>
               <TableHead className="text-right w-[150px]" />
             </TableRow>
           </TableHeader>
@@ -390,6 +527,60 @@ export function JiraIssueTable({
                     {formatDistanceToNow(new Date(issue.updated), {
                       addSuffix: true,
                     })}
+                  </TableCell>
+                  <TableCell
+                    className={cn(
+                      "text-xs inline-flex items-center gap-1",
+                      isUnread && "font-semibold",
+                      existingNotionPage?.dueDate &&
+                        getDueDateStatus(existingNotionPage?.dueDate).className
+                    )}
+                  >
+                    {existingNotionPage?.dueDate &&
+                      getDueDateStatus(existingNotionPage?.dueDate).text}
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-7 w-7">
+                          {existingNotionPage?.dueDate ? (
+                            <Edit2 className="h-4 w-4" />
+                          ) : (
+                            <Calendar className="h-4 w-4" />
+                          )}
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent>
+                        <DropdownMenuItem
+                          disabled={
+                            !existingNotionPage?.id || isUpdatingDueDate
+                          }
+                          onSelect={() =>
+                            handleDueDateChange(issue.key, "this-sprint")
+                          }
+                        >
+                          Due this sprint
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={
+                            !existingNotionPage?.id || isUpdatingDueDate
+                          }
+                          onSelect={() =>
+                            handleDueDateChange(issue.key, "next-sprint")
+                          }
+                        >
+                          Due next sprint
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={
+                            !existingNotionPage?.id || isUpdatingDueDate
+                          }
+                          onSelect={() =>
+                            handleDueDateChange(issue.key, "next-quarter")
+                          }
+                        >
+                          Due next quarter
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                   <TableCell className="text-right">
                     <div

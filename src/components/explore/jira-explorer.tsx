@@ -18,6 +18,7 @@ import {
 } from "@/lib/read-jiras-issues/services/mutations";
 import { getReadJiraIssues } from "@/lib/read-jiras-issues/services/queries";
 import { JiraIssueWithQuery } from "./types";
+import { updateNotionPageDueDate } from "@/lib/notion/services";
 
 export function JiraExplorer() {
   const queryClient = useQueryClient();
@@ -55,6 +56,14 @@ export function JiraExplorer() {
   };
 
   const handleNotionPageCreated = () => {
+    queryClient.invalidateQueries({ queryKey: ["notionPages"] });
+  };
+
+  const handleUpdateNotionPageDueDate = async (
+    pageId: string,
+    dueDate: string
+  ) => {
+    await updateNotionPageDueDate(pageId, dueDate);
     queryClient.invalidateQueries({ queryKey: ["notionPages"] });
   };
 
@@ -153,6 +162,7 @@ export function JiraExplorer() {
               onIssueIgnored={handleIssueIgnored}
               onIssueRead={handleIssueRead}
               onIssueUnread={handleIssueUnread}
+              onUpdateNotionPageDueDate={handleUpdateNotionPageDueDate}
               onNotionPageCreated={handleNotionPageCreated}
             />
           )}
