@@ -78,6 +78,9 @@ export const useJiraQueries = (): UseJiraQueries => {
 			issues: res
 		}
 	  },
+	  onSuccess: () => {
+		qc.invalidateQueries({ queryKey: ["readJiraIssues"] });
+	  },
       enabled: false,
 	  retry: false,
 	  staleTime: Infinity,
