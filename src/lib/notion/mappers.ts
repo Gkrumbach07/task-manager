@@ -8,18 +8,18 @@ import { NotionPage, CreateNotionPageDto, NotionDatabaseTaskPropertiesSchema } f
 export function mapNotionApiResponseToNotionPage(notionApiPage: PageObjectResponse | DatabaseObjectResponse): NotionPage {
   const propertiesParsed = NotionDatabaseTaskPropertiesSchema.safeParse(notionApiPage.properties);
   if (!propertiesParsed.success) {
+    console.error(JSON.stringify(propertiesParsed.error.errors, null, 2));
     throw new Error("Invalid properties");
   }
   const properties = propertiesParsed.data;
 
-  
   return {
     id: notionApiPage.id,
     url: notionApiPage.url,
     title: properties.Name.title.map((t) => t.plain_text).join(""),
     status: properties.Status?.status?.name,
     dueDate: properties['Due date']?.date?.start,
-    labels: properties.Labels?.multi_select?.map((option) => option.name),
+    type: properties.Type?.select?.name,
     jiraIssueKey: properties['Jira key']?.rich_text?.map((t) => t.plain_text).join(""),
   };
 }

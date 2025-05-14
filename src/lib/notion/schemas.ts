@@ -19,14 +19,14 @@ export const NotionDatabaseTaskPropertiesSchema = z.object({
       color: z.string()
     }).nullable()
   }),
-  'Labels': z.object({
+  'Type': z.object({
     id: z.string(),
-    type: z.enum(['multi_select']),
-    multi_select: z.array(z.object({
+    type: z.enum(['select']),
+    select: z.object({
       id: z.string(),
       name: z.string(),
       color: z.string()
-    }))
+    }).nullable()
   }),
   'Due date': z.object({
     id: z.string(),
@@ -97,7 +97,7 @@ export const NotionPageSchema = z.object({
   title: z.string(),
   status: z.string().nullable().optional(),
   dueDate: z.string().nullable().optional(),
-  labels: z.array(z.string()).optional(),
+  type: z.string().nullable().optional(),
   jiraIssueKey: z.string().nullable().optional(),
 });
 
