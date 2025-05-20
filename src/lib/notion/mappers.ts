@@ -1,5 +1,8 @@
 import { CreatePageParameters, DatabaseObjectResponse, PageObjectResponse } from "@notionhq/client/build/src/api-endpoints";
 import { NotionPage, CreateNotionPageDto, NotionDatabaseTaskPropertiesSchema } from "./schemas";
+import type { JiraDto } from "@/lib/jira/schemas";
+import { JiraType } from "@/lib/jira/enums";
+import { NotionCustomEmoji } from "./schemas";
 
 
 /**
@@ -54,4 +57,32 @@ export function mapCreateDtoToNotionApiRequest(
       } : undefined,
     properties,
   };
-} 
+}
+
+export const mapJiraIssueTypeToNotionCustomEmoji = (
+  issueType: JiraType
+): NotionCustomEmoji => {
+  switch (issueType) {
+    case JiraType.TASK:
+      return NotionCustomEmoji.JiraTask;
+    case JiraType.SUB_TASK:
+      return NotionCustomEmoji.JiraSubtask;
+    case JiraType.BUG:
+      return NotionCustomEmoji.JiraBug;
+    case JiraType.STORY:
+      return NotionCustomEmoji.JiraStory;
+    case JiraType.EPIC:
+      return NotionCustomEmoji.JiraEpic;
+    case JiraType.FEATURE: // Assuming FEATURE maps to Epic based on original code
+      return NotionCustomEmoji.JiraEpic;
+    default:
+      // Fallback for unhandled Jira types
+      return NotionCustomEmoji.JiraTask; // Default to JiraTask
+  }
+};
+
+export const jiraToCreateNotionPageDto = (issue: JiraDto): CreateNotionPageDto => ({
+  title: issue.title,
+  sourceJiraKey: issue.key,
+  type: mapJiraIssueTypeToNotionCustomEmoji(issue.type),
+}); 

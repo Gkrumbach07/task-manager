@@ -44,42 +44,15 @@ import { cn } from "@/lib/utils";
 
 import type { JiraDto } from "@/lib/jira/schemas";
 import type { ReadJiraIssueDto } from "@/lib/read-jiras-issues/schemas";
-import { CreateNotionPageDto, NotionCustomEmoji } from "@/lib/notion/schemas";
 import { createNotionPage } from "@/lib/notion/services";
 import { JiraIssueWithQuery } from "./types";
-import { JiraType } from "@/lib/jira/enums";
+import { jiraToCreateNotionPageDto } from "@/lib/notion/mappers";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
-
-const mapJiraIssueTypeToNotionCustomEmoji = (
-  issueType: JiraType
-): NotionCustomEmoji => {
-  switch (issueType) {
-    case JiraType.TASK:
-      return NotionCustomEmoji.JiraTask;
-    case JiraType.SUB_TASK:
-      return NotionCustomEmoji.JiraSubtask;
-    case JiraType.BUG:
-      return NotionCustomEmoji.JiraBug;
-    case JiraType.STORY:
-      return NotionCustomEmoji.JiraStory;
-    case JiraType.EPIC:
-      return NotionCustomEmoji.JiraEpic;
-    case JiraType.FEATURE:
-      return NotionCustomEmoji.JiraEpic;
-  }
-};
-
-// Helper function to map Jira issue to CreateNotionPageDto
-const jiraToCreateNotionPageDto = (issue: JiraDto): CreateNotionPageDto => ({
-  title: issue.title,
-  sourceJiraKey: issue.key,
-  type: mapJiraIssueTypeToNotionCustomEmoji(issue.type),
-});
 
 type DueDateStatus = {
   text: string;

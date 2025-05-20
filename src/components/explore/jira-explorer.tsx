@@ -19,12 +19,25 @@ import {
 import { getReadJiraIssues } from "@/lib/read-jiras-issues/services/queries";
 import { JiraIssueWithQuery } from "./types";
 import { updateNotionPageDueDate } from "@/lib/notion/services";
+import { useJiraPasteHandler } from "@/hooks/use-jira-paste-handler";
+import { JiraImportModal } from "@/components/jira-import-modal";
 
 export function JiraExplorer() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<string>("all");
   const [showLinked, setShowLinked] = useState<boolean>(true);
   const { jiras, queries } = useJiraQueries();
+
+  const {
+    isModalOpen,
+    closeModal,
+    jiraIssue,
+    isLoadingJira,
+    isCreatingNotionPage,
+    jiraError,
+    handleImportConfirm,
+    pastedKey,
+  } = useJiraPasteHandler();
 
   const { data: hiddenJiraIssues } = useQuery({
     queryKey: ["hiddenJiraIssues"],
@@ -168,6 +181,16 @@ export function JiraExplorer() {
           )}
         </Tabs>
       </div>
+      <JiraImportModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        onConfirm={handleImportConfirm}
+        jiraIssue={jiraIssue}
+        isLoading={isLoadingJira}
+        isImporting={isCreatingNotionPage}
+        error={jiraError}
+        pastedKey={pastedKey}
+      />
     </div>
   );
 }

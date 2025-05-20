@@ -101,6 +101,50 @@ export async function searchIssuesByJql(
   }
 }
 
+export async function getJiraIssueByKey(issueKey: string): Promise<JiraDto> {
+  const jiraConfig = await getJiraConfig();
+
+  const baseUrl = jiraConfig?.baseUrl;
+  const email = jiraConfig?.userEmail;
+  const apiToken = jiraConfig?.apiToken;
+
+  if (!baseUrl || !email || !apiToken) {
+    throw new Error(
+      "Jira is not configured. Please configure Jira in the settings."
+    );
+  }
+
+  // Use /rest/api/2/issue/{issueIdOrKey} for fetching a single issue
+  const apiPath = `/rest/api/2/issue/${issueKey}`;
+  const url = `${baseUrl}${apiPath}`;
+
+  const headers = {
+    Authorization: `Bearer ${apiToken}`, // Assuming Bearer token auth, adjust if Basic Auth
+    Accept: "application/json",
+  };
+
+  try {
+    const response = await fetch(url, {
+      method: "GET",
+      headers,
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(
+        `Jira API request failed with status ${response.status}: ${errorText}`
+      );
+    }
+
+    const data: JiraIssue = await response.json(); // Use the more detailed JiraIssue type from the API
+    // Map to JiraDto, ensuring all required fields are present
+    return fromJira(data, baseUrl);
+  } catch (error) {
+    console.error(`Error fetching Jira issue ${issueKey}:`, error);
+    throw error;
+  }
+}
+
 export const searchIssuesByJqlAndUpdateReadJiraIssues = createParallelAction(async (
   jql: string,
   startAt?: number,
